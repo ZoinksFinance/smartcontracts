@@ -3,6 +3,8 @@ const hre = require("hardhat");
 const { ethers, deployments } = hre;
 const {
   mockedResultOfSwap,
+  mintNativeTokens,
+  withImpersonatedSigner,
   mockedLiquidity,
   ZERO_ADDRESS,
   ZERO,
@@ -211,21 +213,20 @@ describe("Seniorage", () => {
     // Attempt to distribute when balance is zero
     await busd.burn(seniorage.address, oldBalance);
     await seniorage.distributeBusd(
-      ZERO, ZERO, ZERO, ZERO, ZERO
+      ZERO, ZERO, ZERO
     );
     await busd.mint(seniorage.address, oldBalance);
 
     // ASSERT
     await expect(seniorage.connect(devWallet).distributeBusd(
-      ZERO, ZERO, ZERO, ZERO, ZERO
+      ZERO, ZERO, ZERO
     )).to.be.revertedWith("Seniorage: caller is not authorised");
   });
 
   describe('3. Variations of distributeBusd() execution', () => {
     // ARRANGE. Fase 1
     const taxPercentForBuy = 5;
-    const senioragePercent = 5455;
-    const pulsePercent = 4545;
+    const pulsePercent = 5000;
 
     const seniorageBusdBalance = ethers.utils.parseEther("5000");
 
@@ -273,19 +274,15 @@ describe("Seniorage", () => {
 
       // the local variable is in distributeBusd function
       const differenceForEthAndBtcSnacks = amountSnacksToMint.sub(amountSnacksToMint.mul(taxPercentForBuy).div(100));
-
-      const anySnacksForSeniorageWallet = differenceForEthAndBtcSnacks.mul(senioragePercent).div(10000);
       const anySnacksForPulse = differenceForEthAndBtcSnacks.mul(pulsePercent).div(10000);
 
       // ACT
       await seniorage.distributeBusd(
-        ZERO, ZERO, ZERO, ZERO, ZERO
+        ZERO, ZERO, ZERO
       );
 
       // ASSERT
-      expect(await btcSnacks.balanceOf(seniorageWallet.address)).to.be.equal(anySnacksForSeniorageWallet);
       expect(await btcSnacks.balanceOf(pulse.address)).to.be.equal(anySnacksForPulse);
-      expect(await ethSnacks.balanceOf(seniorageWallet.address)).to.be.equal(anySnacksForSeniorageWallet);
       expect(await ethSnacks.balanceOf(pulse.address)).to.be.equal(anySnacksForPulse);
     });
 
@@ -314,43 +311,14 @@ describe("Seniorage", () => {
 
       // ACT
       await seniorage.distributeBusd(
-        ZERO, ZERO, ZERO, ZERO, ZERO
+        ZERO, ZERO, ZERO
       );
 
       // ASSERT
       expect(await snacks.balanceOf(pulse.address)).to.be.equal(differenceForSnacks);
     });
 
-    it("3.3. Successful distributeBusd() execution - check Snacks supplying liquidity", async () => {
-      // ARRANGE. Fase 2
-      await prepareTokensForDistribution(
-        seniorageBusdBalance,
-        amountToSwapOnZoinksToSupplyLiquidity,
-        amountToSwapOnZoinksToSupplyLiquidity
-      );
-
-      await mockSwaps(
-        'PancakeSwapRouter',
-        deployments,
-        ZERO,
-        owner.address,
-        amountToSwapOnZoinksToSupplyLiquidity
-      );
-      await mockLiquidity(
-        amountToSwapOnZoinksToSupplyLiquidity,
-        deployments
-      );
-
-      // ACT
-      await seniorage.distributeBusd(
-        ZERO, ZERO, ZERO, ZERO, ZERO
-      );
-
-      // ASSERT
-      expect(await pair.balanceOf(pulse.address)).to.be.equal(amountToSwapOnZoinksToSupplyLiquidity);
-    });
-
-    it("3.4. Successful distributeBusd() execution (insufficient amounts)", async () => {
+    it("3.3. Successful distributeBusd() execution (insufficient amounts)", async () => {
       const insufficientAmount = 1000;
       const sufficientAmount = ethers.utils.parseEther("100");
       await pair.transfer(seniorage.address, ethers.utils.parseEther("1500"));
@@ -367,7 +335,7 @@ describe("Seniorage", () => {
         deployments
       );
       // Distribution
-      await seniorage.distributeBusd(0, 0, 0, 0, 0);
+      await seniorage.distributeBusd(0, 0, 0);
       // Check stored amounts
       expect(await seniorage.btcAmountStored()).to.equal(1000);
       expect(await seniorage.ethAmountStored()).to.equal(1000);
@@ -389,7 +357,7 @@ describe("Seniorage", () => {
         deployments
       );
       // Distribution
-      await seniorage.distributeBusd(0, 0, 0, 0, 0);
+      await seniorage.distributeBusd(0, 0, 0);
       // Check stored amounts
       expect(await seniorage.btcAmountStored()).to.equal(0);
       expect(await seniorage.ethAmountStored()).to.equal(0);
@@ -444,7 +412,6 @@ describe("Seniorage", () => {
       ZERO_ADDRESS,
       ZERO_ADDRESS,
       ZERO_ADDRESS,
-      ZERO_ADDRESS,
       ZERO_ADDRESS
     )).to.be.revertedWith("Ownable: caller is not the owner");
     await seniorage.configureWallets(
@@ -455,7 +422,6 @@ describe("Seniorage", () => {
       devWallet.address,
       marketingFundWallet.address,
       situationalFundWallet.address,
-      seniorageWallet.address,
       multisigWallet.address
     );
 
@@ -509,5 +475,38 @@ describe("Seniorage", () => {
     await seniorage.unpause();
     // Attempt to call
     await seniorage.distributeNonBusdCurrencies(0, 0, 0);
+  });
+
+  it("10. Successful provideLiquidity() execution", async () => {
+    // BUSD amount stored = 0
+    await seniorage.provideLiquidity(0, 0);
+    await withImpersonatedSigner(seniorage.address, async (seniorageSigner) => {
+      const hexAmountOfNativeTokens = '0x10000000000000000000';
+      await mintNativeTokens(seniorage.address, hexAmountOfNativeTokens);
+      await busd.connect(seniorageSigner).transfer(pulse.address, await busd.balanceOf(seniorage.address));
+    });
+    expect(await seniorage.busdAmountStored()).to.equal(0);
+    expect(await busd.balanceOf(seniorage.address)).to.equal(0);
+    ONE = ethers.utils.parseEther("1");
+    await btc.transfer(seniorage.address, ONE);
+    await eth.transfer(seniorage.address, ONE);
+    await zoinks.transfer(seniorage.address, ONE);
+    await mockSwaps(
+      "PancakeSwapRouter",
+      deployments,
+      0,
+      owner.address,
+      ONE
+    );
+    await busd.transfer(seniorage.address, 10000);
+    await seniorage.distributeBusd(0, 0, 0);
+    expect(await seniorage.busdAmountStored()).to.equal(2500);
+    await mockLiquidity(
+      mockedLiquidity,
+      deployments
+    );
+    await pair.transfer(seniorage.address, mockedLiquidity);
+    await seniorage.provideLiquidity(0, 0);
+    expect(await pair.balanceOf(pulse.address)).to.equal(mockedLiquidity);
   });
 });

@@ -11,7 +11,6 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
     devWallet,
     marketingFundWallet,
     situationalFundWallet,
-    seniorageWallet, 
     multisigWallet
   ] = await ethers.getSigners();
 
@@ -32,7 +31,6 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
     devWallet.address,
     marketingFundWallet.address,
     situationalFundWallet.address,
-    seniorageWallet.address,
     multisigWallet.address
   );
 

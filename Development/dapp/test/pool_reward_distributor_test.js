@@ -1,7 +1,7 @@
 const { expect } = require("chai");
 const hre = require("hardhat");
 const { ethers, deployments, getNamedAccounts } = hre;
-const { mintZoinksAndAllSnacks } = require("../deploy/helpers");
+const { mintZoinksAndAllSnacks, mockSwaps } = require("../deploy/helpers");
 
 describe("PoolRewardDistributor", () => {
 
@@ -75,10 +75,39 @@ describe("PoolRewardDistributor", () => {
     );
   });
 
+  it("Successful configure()", async() => {
+    await expect(poolRewardDistributor.connect(authority).configure(
+        zoinks.address,
+        snacks.address,
+        btcSnacks.address,
+        ethSnacks.address,
+        apeSwapPool.address,
+        biSwapPool.address,
+        pancakeSwapPool.address,
+        snacksPool.address,
+        lunchBox.address,
+        seniorage.address,
+        authority.address
+    )).to.be.revertedWith("Ownable: caller is not the owner");
+    await expect(poolRewardDistributor.connect(deployer).configure(
+      zoinks.address,
+      snacks.address,
+      btcSnacks.address,
+      ethSnacks.address,
+      apeSwapPool.address,
+      biSwapPool.address,
+      pancakeSwapPool.address,
+      snacksPool.address,
+      lunchBox.address,
+      seniorage.address,
+      authority.address
+    ))
+});
+
   it('should pause the contract', async () => {
     await poolRewardDistributor.pause();
     expect(await poolRewardDistributor.paused()).to.be.true;
-    await expect(poolRewardDistributor.distributeRewards())
+    await expect(poolRewardDistributor.distributeRewards(0))
       .to.be.revertedWith("Pausable: paused");
   });
 
@@ -90,7 +119,7 @@ describe("PoolRewardDistributor", () => {
   });
 
   it('should fail if executed not by authority', async () => {
-    await expect(poolRewardDistributor.distributeRewards())
+    await expect(poolRewardDistributor.distributeRewards(0))
       .to.be.revertedWith("PoolRewardDistributor: caller is not authorised");
   });
 
@@ -109,7 +138,6 @@ describe("PoolRewardDistributor", () => {
 
     const totalAmountToMintOfAll = ethers.utils.parseEther('1');
     
-    await busd.mint(poolRewardDistributor.address, totalAmountToMintOfAll);
     await mintZoinksAndAllSnacks(
       deployments, deployer, totalAmountToMintOfAll, poolRewardDistributor
     );
@@ -118,16 +146,13 @@ describe("PoolRewardDistributor", () => {
     let snacksBalance = await snacks.balanceOf(poolRewardDistributor.address);
     let btcSnacksBalance = await btcSnacks.balanceOf(poolRewardDistributor.address);
     let ethSnacksBalance = await ethSnacks.balanceOf(poolRewardDistributor.address);
-    let busdBalance = await busd.balanceOf(poolRewardDistributor.address);
-    const seniorageOldBalanceBusd = await busd.balanceOf(seniorage.address);
 
-    await poolRewardDistributor.connect(authority).distributeRewards();
+    await poolRewardDistributor.connect(authority).distributeRewards(0);
 
     zoinksBalance = zoinksBalance.sub(await zoinks.balanceOf(poolRewardDistributor.address));
     snacksBalance = snacksBalance.sub(await snacks.balanceOf(poolRewardDistributor.address));
     btcSnacksBalance = btcSnacksBalance.sub(await btcSnacks.balanceOf(poolRewardDistributor.address));
     ethSnacksBalance = ethSnacksBalance.sub(await ethSnacks.balanceOf(poolRewardDistributor.address));
-    busdBalance = busdBalance.sub(await busd.balanceOf(poolRewardDistributor.address));
 
     const expectBalances = async (
       token,
@@ -204,16 +229,7 @@ describe("PoolRewardDistributor", () => {
       }
     );
 
-    const seniorageFeeBusd = busdBalance.mul(SENIORAGE_FEE_PERCENT).div(BASE_PERCENT);
-    await expectBalances(
-      busd,
-      {
-        expectedSeniorageBalance: seniorageOldBalanceBusd.add(seniorageFeeBusd),
-        expectedLunchBoxBalance: busdBalance.sub(seniorageFeeBusd)
-      }
-    );
-
     // Without any tokens
-    await poolRewardDistributor.connect(authority).distributeRewards();
+    await poolRewardDistributor.connect(authority).distributeRewards(0);
   });
 });

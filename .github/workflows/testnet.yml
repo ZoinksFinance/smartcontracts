@@ -1,0 +1,40 @@
+name: testnet CI/CD
+
+on:
+  push:
+    branches: [ "develop" ]
+
+jobs:
+
+  redeploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./Development/dapp
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies, build
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+      - run: yarn install --force
+
+      - name: Copy dapp folder via scp
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.HH_HOST }}
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORD }}
+          port: ${{ secrets.PORT }}
+          source: "Development/dapp"
+          target: "dapp"
+
+      - name: Re-run hardhat node
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HH_HOST }}
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORD }}
+          port: ${{ secrets.PORT }}
+          script: ~/hhnode

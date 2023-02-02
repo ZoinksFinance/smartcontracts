@@ -418,6 +418,7 @@ abstract contract SnacksBase is ISnacksBase, IERC20Metadata, Ownable, Reentrancy
             _excludedHolders.add(account_),
             "SnacksBase: already excluded"
         );
+        _adjustedBalances[account_] = _adjustedBalances[account_].mul(adjustmentFactor);
     }
 
     /**
@@ -430,6 +431,7 @@ abstract contract SnacksBase is ISnacksBase, IERC20Metadata, Ownable, Reentrancy
             _excludedHolders.remove(account_),
             "SnacksBase: not excluded"
         );
+        _adjustedBalances[account_] = _adjustedBalances[account_].div(adjustmentFactor);
     }
 
     /**

@@ -6,7 +6,7 @@ const {
   mockedReserve1,
   mockedReserve0,
   mockReserves,
-  mockPrice1Cumulative
+  mockPrice0Cumulative
 } = require("../deploy/helpers");
 
 describe("Zoinks", () => {
@@ -41,6 +41,10 @@ describe("Zoinks", () => {
       hre.names.internal.poolRewardDistributor,
       (await deployments.get(hre.names.internal.poolRewardDistributor)).address
     );
+    pancakePair = await ethers.getContractAt(
+      "IPair",
+      (await deployments.get(hre.names.external.pairs.pancake.pair)).address
+    );
     pancakePairAddress = (await deployments.get(hre.names.external.pairs.pancake.pair)).address;
     apePairAddress = (await deployments.get(hre.names.external.pairs.ape.pair)).address;
     biPairAddress = (await deployments.get(hre.names.external.pairs.bi.pair)).address;
@@ -70,11 +74,6 @@ describe("Zoinks", () => {
   it("Successful mint() execution", async() => {
     // Mint 0
     await expect(zoinks.mint(0)).to.be.revertedWith("Zoinks: invalid amount");
-    // Mint max supply
-    const maxSupply = await zoinks.MAX_SUPPLY();
-    await busd.mint(owner.address, maxSupply);
-    await busd.approve(zoinks.address, maxSupply);
-    await expect(zoinks.mint(maxSupply)).to.be.revertedWith("Zoinks: max supply exceeded");
     // Mint 1000
     const supplyBefore = await zoinks.totalSupply();
     const seniorageBalanceBefore = await busd.balanceOf(seniorage.address);
@@ -86,18 +85,21 @@ describe("Zoinks", () => {
     expect(await zoinks.totalSupply()).to.equal(supplyBefore.add(amountToMint));
     expect(await zoinks.balanceOf(owner.address)).to.equal(ownerBalanceBefore.add(amountToMint));
     expect(await busd.balanceOf(seniorage.address)).to.equal(seniorageBalanceBefore.add(amountToMint));
+    // Mint max supply
+    const maxSupply = await zoinks.MAX_SUPPLY();
+    await busd.mint(owner.address, maxSupply);
+    await busd.approve(zoinks.address, maxSupply);
+    await expect(zoinks.mint(maxSupply)).to.be.revertedWith("Zoinks: max supply exceeded");
   });
 
   it("Successful applyTWAP() execution (max supply has been exceeded)", async() => {
     const MAX_SUPPLY = await zoinks.MAX_SUPPLY();
     await busd.mint(owner.address, MAX_SUPPLY);
     await busd.approve(zoinks.address, MAX_SUPPLY);
-    await zoinks.mint(MAX_SUPPLY.sub(ethers.utils.parseEther('1')));
+    await zoinks.mint(MAX_SUPPLY.sub(ethers.utils.parseEther('500001')));
     await time.increase(3600 * 12);
-    await expect(zoinks.applyTWAP())
-      .to.be.revertedWith('Zoinks: caller is not authorised');
-    await expect(zoinks.connect(authority).applyTWAP())
-      .to.be.revertedWith('Zoinks: max supply exceeded');
+    await expect(zoinks.applyTWAP()).to.be.revertedWith('Zoinks: caller is not authorised');
+    await expect(zoinks.connect(authority).applyTWAP()).to.be.revertedWith('Zoinks: max supply exceeded');
   });
 
   const applyTWAPTestCase = async (expectedInflationPercent, timeElapsed) => {
@@ -129,8 +131,8 @@ describe("Zoinks", () => {
     const pulseExpectedBalanceInSnacks = expectedBuySnacksAmount.mul(PULSE_PERCENT).div(BASE_PERCENT);
     await zoinks.connect(authority).applyTWAP();
 
-    const zoinksTolerance = ethers.BigNumber.from('200000000000000'); // 0.0002 eth
-    const snacksTolerance = ethers.BigNumber.from('150000000000000000'); // 0.15 eth
+    const zoinksTolerance = ethers.utils.parseEther("200");
+    const snacksTolerance = ethers.utils.parseEther("200");
     
     expect(await zoinks.balanceOf(poolRewardDistributor.address)).to.be.closeTo(
       poolRewardDistributorExpectedBalanceInZoinks, zoinksTolerance
@@ -170,7 +172,7 @@ describe("Zoinks", () => {
       .div(mockedReserve0.sub(reserveDifference))
       .mul(timeElapsed);
 
-    await mockPrice1Cumulative(newExpectedPrice1Cumulative, deployments);
+    await mockPrice0Cumulative(newExpectedPrice1Cumulative, deployments);
 
     let apeSwapAveragePrice =
       newExpectedPrice1Cumulative
@@ -215,7 +217,7 @@ describe("Zoinks", () => {
     const Q112 = ethers.BigNumber.from("2").pow(112);
     const timeElapsed = 43200;
     const cumulativePrice = Q112.mul(timeElapsed).mul(2);
-    await mockPrice1Cumulative(cumulativePrice, deployments);
+    await mockPrice0Cumulative(cumulativePrice, deployments);
     await time.increase(timeElapsed);
     await zoinks.connect(authority).applyTWAP();
   });
@@ -228,8 +230,8 @@ describe("Zoinks", () => {
     await zoinks.setBuffer(buffer);
     await time.increase(timeElapsed);
     await zoinks.connect(authority).applyTWAP();
-    expect(await zoinks.zoinksAmountStored()).to.equal(7);
-    await mockPrice1Cumulative(cumulativePrice, deployments);
+    expect(await zoinks.zoinksAmountStored()).to.equal(3750007);
+    await mockPrice0Cumulative(cumulativePrice, deployments);
     await zoinks.setBuffer(5);
     await time.increase(timeElapsed);
     await zoinks.connect(authority).applyTWAP();

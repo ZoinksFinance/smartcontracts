@@ -7,6 +7,8 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./interfaces/IMultipleRewardPool.sol";
 import "./interfaces/ISingleRewardPool.sol";
+import "./interfaces/IRouter.sol";
+import "./interfaces/ISnacksBase.sol";
 
 contract PoolRewardDistributor is Ownable, Pausable {
     using SafeERC20 for IERC20;
@@ -23,7 +25,8 @@ contract PoolRewardDistributor is Ownable, Pausable {
     uint256 private constant ETH_SNACKS_PANCAKE_SWAP_POOL_PERCENT = 5714;
     uint256 private constant ETH_SNACKS_SNACKS_POOL_PERCENT = 4286;
     
-    address public busd;
+    address public immutable busd;
+    address public immutable router;
     address public zoinks;
     address public snacks;
     address public btcSnacks;
@@ -43,11 +46,23 @@ contract PoolRewardDistributor is Ownable, Pausable {
         );
         _;
     }
+
+    /**
+    * @param busd_ Binance-Peg BUSD token address.
+    * @param router_ Router contract address (from PancakeSwap DEX).
+    */
+    constructor(
+        address busd_,
+        address router_
+    ) {
+        busd = busd_;
+        router = router_;
+        IERC20(busd_).approve(router_, type(uint256).max);
+    }
     
     /**
     * @notice Configures the contract.
     * @dev Could be called by the owner in case of resetting addresses.
-    * @param busd_ Binance-Peg BUSD token address.
     * @param zoinks_ Zoinks token address.
     * @param snacks_ Snacks token address.
     * @param btcSnacks_ BtcSnacks token address.
@@ -61,7 +76,6 @@ contract PoolRewardDistributor is Ownable, Pausable {
     * @param authority_ Authorised address.
     */
     function configure(
-        address busd_,
         address zoinks_,
         address snacks_,
         address btcSnacks_,
@@ -77,7 +91,6 @@ contract PoolRewardDistributor is Ownable, Pausable {
         external
         onlyOwner
     {
-        busd = busd_;
         zoinks = zoinks_;
         snacks = snacks_;
         btcSnacks = btcSnacks_;
@@ -89,6 +102,9 @@ contract PoolRewardDistributor is Ownable, Pausable {
         lunchBox = lunchBox_;
         seniorage = seniorage_;
         authority = authority_;
+        if (IERC20(zoinks_).allowance(address(this), snacks_) == 0) {
+            IERC20(zoinks_).approve(snacks_, type(uint256).max);
+        }
     }
 
     /**
@@ -110,8 +126,10 @@ contract PoolRewardDistributor is Ownable, Pausable {
     /**
     * @notice Distributes rewards on pools and notifies them.
     * @dev Called by the authorised address once every 12 hours.
+    * @param zoinksAmountOutMin_ Minimum expected amount of Zoinks token 
+    * to be received after the exchange 90% of the total balance of Binance-Peg BUSD token.
     */
-    function distributeRewards() external whenNotPaused onlyAuthority {
+    function distributeRewards(uint256 zoinksAmountOutMin_) external whenNotPaused onlyAuthority {
         uint256 reward;
         uint256 seniorageFeeAmount;
         uint256 distributionAmount;
@@ -188,10 +206,21 @@ contract PoolRewardDistributor is Ownable, Pausable {
             // 10% of the balance goes to the Seniorage contract.
             seniorageFeeAmount = busdBalance * SENIORAGE_FEE_PERCENT / BASE_PERCENT;
             IERC20(busd).safeTransfer(seniorage, seniorageFeeAmount);
+            // Exchange 100% of the distribution amount on Zoinks tokens.
             distributionAmount = busdBalance - seniorageFeeAmount;
-            // 100% of the distribution amount goes to the LunchBox contract.
-            IERC20(busd).safeTransfer(lunchBox, distributionAmount);
-            ISingleRewardPool(lunchBox).notifyRewardAmount(distributionAmount);
+            address[] memory path = new address[](2);
+            path[0] = busd;
+            path[1] = zoinks;
+            uint256[] memory amounts = IRouter(router).swapExactTokensForTokens(
+                distributionAmount,
+                zoinksAmountOutMin_,
+                path,
+                address(this),
+                block.timestamp
+            );
+            uint256 snacksAmount = ISnacksBase(snacks).mintWithPayTokenAmount(amounts[1]);
+            IERC20(snacks).safeTransfer(lunchBox, snacksAmount);
+            ISingleRewardPool(lunchBox).notifyRewardAmount(snacksAmount);
         }
     }
 }

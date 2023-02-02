@@ -50,6 +50,7 @@ module.exports = async ({
 
   await deploy(hre.names.internal.poolRewardDistributor, {
     from: deployer,
+    args: [busdAddress, pancakeSwapRouterAddress],
     skipIfAlreadyDeployed: skipDeploymentIfAlreadyDeployed,
     log: true
   });

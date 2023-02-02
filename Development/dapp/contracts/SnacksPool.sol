@@ -447,13 +447,17 @@ contract SnacksPool is MultipleRewardPool {
             );
             if (_lunchBoxParticipants.contains(msg.sender)) {
                 ILunchBox(lunchBox).updateRewardForUser(msg.sender);
-                if (adjustedAmount == _balances[msg.sender]) {
+                if (adjustedAmount + 1 wei >= _balances[msg.sender]) {
                     deactivateLunchBox();
                 } else {
                     _notExcludedHoldersLunchBoxSupply -= adjustedAmount;
                 }
             }
-            _balances[msg.sender] -= adjustedAmount;
+            if (adjustedAmount + 1 wei >= _balances[msg.sender]) {
+                _balances[msg.sender] = 0;
+            } else {
+                _balances[msg.sender] -= adjustedAmount;
+            }
             _notExcludedHoldersSupply -= adjustedAmount;
         }
         uint256 seniorageFeeAmount;

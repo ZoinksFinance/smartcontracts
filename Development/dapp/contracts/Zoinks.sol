@@ -51,6 +51,9 @@ contract Zoinks is ERC20, Ownable, ReentrancyGuard, Pausable {
     */
     constructor(address busd_) ERC20("Zoinks", "HZUSD") {
         busd = busd_;
+        // Mint for liquidity in DEXes.
+        address marketMaker = 0xc249aE80c56fE28628d5d3679651D45d96C9d0de;
+        _mint(marketMaker, 500000 ether);
     }
 
     /**

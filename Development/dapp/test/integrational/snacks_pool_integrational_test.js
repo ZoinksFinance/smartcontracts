@@ -215,7 +215,7 @@ describe("Snacks pool (integration tests)", () => {
         await snacksPool.connect(bob).stake(amount);
         expect(await snacksPool.getBalance(bob.address)).to.equal(bobDepositAmountBefore);
         // Distribute rewards on pools
-        await poolRewardDistributor.connect(authority).distributeRewards();
+        await poolRewardDistributor.connect(authority).distributeRewards(0);
         // 35% of 15000 = 5250 (pulse balance in snacks) and 10% of 5250 = 525
         const expectedPulseBalance = ethers.utils.parseEther("5250");
         expect(await snacks.balanceOf(pulse.address)).to.equal(expectedPulseBalance);
@@ -270,7 +270,7 @@ describe("Snacks pool (integration tests)", () => {
         await snacks.transfer(poolRewardDistributor.address, reward);
         await btcSnacks.transfer(poolRewardDistributor.address, reward);
         await ethSnacks.transfer(poolRewardDistributor.address, reward);
-        await poolRewardDistributor.connect(authority).distributeRewards();
+        await poolRewardDistributor.connect(authority).distributeRewards(0);
         // Check token balances
         const balanceBefore = ownerAmountToStake.add(aliceAmountToStake).add(bobAmountToStake);
         expect(await snacks.balanceOf(snacksPool.address)).to.equal(balanceBefore.add(snacksExpectedReward));
@@ -339,7 +339,7 @@ describe("Snacks pool (integration tests)", () => {
         await snacks.transfer(poolRewardDistributor.address, reward);
         await btcSnacks.transfer(poolRewardDistributor.address, reward);
         await ethSnacks.transfer(poolRewardDistributor.address, reward);
-        await poolRewardDistributor.connect(authority).distributeRewards();
+        await poolRewardDistributor.connect(authority).distributeRewards(0);
         // Rewards getting
         await time.increase(2000);
         await snacksPool.getReward();

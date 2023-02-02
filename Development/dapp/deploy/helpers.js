@@ -12,7 +12,7 @@ const mockedResultOfSwap = ethers.utils.parseEther("2");
 const mockedLiquidity = ethers.utils.parseEther("1");
 const mockedReserve0 = ethers.utils.parseEther("10");
 const mockedReserve1 = ethers.utils.parseEther("20");
-const skipDeploymentIfAlreadyDeployed = false;
+const skipDeploymentIfAlreadyDeployed = true;
 
 ////////////////////////////////////////////
 // Constants Ends
@@ -117,8 +117,8 @@ const mockSwaps = async (
   );
 };
 
-const mockPrice1Cumulative = async (
-  mockedPrice1Cumulative,
+const mockPrice0Cumulative = async (
+  mockedPrice0Cumulative,
   deployments
 ) => {
   const pancakeZoinksBusdPairMockContract = await hre.ethers.getContractAt(
@@ -139,27 +139,27 @@ const mockPrice1Cumulative = async (
     (await deployments.get(hre.names.external.pairs.pancake.pair)).address
   );
   const price1CumulativeLastSelector = pancakeZoinksBusdPair
-    .interface.encodeFunctionData("price1CumulativeLast");
+    .interface.encodeFunctionData("price0CumulativeLast");
 
   await apeZoinksBusdPairMockContract.givenMethodReturn(
     price1CumulativeLastSelector,
     hre.ethers.utils.defaultAbiCoder.encode(
       ['uint256'],
-      [mockedPrice1Cumulative]
+      [mockedPrice0Cumulative]
     )
   );
   await biZoinksBusdPairMockContract.givenMethodReturn(
     price1CumulativeLastSelector,
     hre.ethers.utils.defaultAbiCoder.encode(
       ['uint256'],
-      [mockedPrice1Cumulative]
+      [mockedPrice0Cumulative]
     )
   );
   await pancakeZoinksBusdPairMockContract.givenMethodReturn(
     price1CumulativeLastSelector,
     hre.ethers.utils.defaultAbiCoder.encode(
       ['uint256'],
-      [mockedPrice1Cumulative]
+      [mockedPrice0Cumulative]
     )
   );
 };
@@ -477,19 +477,21 @@ const backendCall1224 = async (hre) => {
   await snacks.connect(authority).distributeFee();
   // 5. Pulse - distributeBtcSnacksAndEthSnacks
   await pulse.connect(authority).distributeBtcSnacksAndEthSnacks();
-  // 6. Seniorage - distributeNonBusdCurrencies
+  // 6. Seniorage - provideLiquidity
+  await seniorage.connect(authority).provideLiquidity(0, 0);
+  // 7. Seniorage - distributeNonBusdCurrencies
   await seniorage.connect(authority).distributeNonBusdCurrencies(0, 0, 0);
-  // 7. Seniorage - distributeBusd
-  await seniorage.connect(authority).distributeBusd(0, 0, 0, 0, 0);
-  // 8. Pulse - harvest
+  // 8. Seniorage - distributeBusd
+  await seniorage.connect(authority).distributeBusd(0, 0, 0);
+  // 9. Pulse - harvest
   await pulse.connect(authority).harvest();
-  // 9. Pulse - distributeSnacks
+  // 10. Pulse - distributeSnacks
   await pulse.connect(authority).distributeSnacks();
-  // 10. Pulse - distributeZoinks
+  // 11. Pulse - distributeZoinks
   await pulse.connect(authority).distributeZoinks();
-  // 11. PoolRewardDistributor - distributeRewards
-  await poolRewardDistributor.connect(authority).distributeRewards();
-  // 12. SnacksPool - deliverRewardsForAllLunchBoxParticipants
+  // 12. PoolRewardDistributor - distributeRewards
+  await poolRewardDistributor.connect(authority).distributeRewards(0);
+  // 13. SnacksPool - deliverRewardsForAllLunchBoxParticipants
   let user;
   let totalRewardAmountForParticipantsInSnacks = ZERO;
   let totalRewardAmountForParticipantsInBtcSnacks = ZERO;
@@ -527,7 +529,7 @@ module.exports = {
   mockedReserve0,
   mockedReserve1,
   mockSwaps,
-  mockPrice1Cumulative,
+  mockPrice0Cumulative,
   mockReserves,
   mockLiquidity,
   mockGetPair,

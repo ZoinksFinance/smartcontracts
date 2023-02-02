@@ -1,5 +1,5 @@
 const hre = require('hardhat');
-const { getFakeDeployment } = require('../../../helpers.js');
+const { getFakeDeployment } = require('../../../../helpers');
 
 module.exports = async ({
   getNamedAccounts,

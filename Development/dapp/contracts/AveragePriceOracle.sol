@@ -10,14 +10,15 @@ import "./interfaces/IPair.sol";
 
 contract AveragePriceOracle is IAveragePriceOracle, Ownable, Initializable {
     using PRBMathUD60x18 for uint256;
-
-    uint256 public constant PERIOD = 12 hours;
+    
     uint256 private constant BASE_PERCENT = 10000;
     uint256 private constant APE_SWAP_PERCENT = 1500;
     uint256 private constant BI_SWAP_PERCENT = 1500;
     uint256 private constant PANCAKE_SWAP_PERCENT = 3500;
     uint256 private constant TWAP_PERCENT = 6500;
     uint256 private constant Q112 = 1 << 112;
+    uint256 private constant START_OF_THE_FIRST_PERIOD = 7200;
+    uint256 private constant START_OF_THE_SECOND_PERIOD = 50400;
 
     address public zoinks;
     address public apeSwapPair;
@@ -30,6 +31,8 @@ contract AveragePriceOracle is IAveragePriceOracle, Ownable, Initializable {
     uint256 private _apeSwapPriceCumulativeLast;
     uint256 private _biSwapPriceCumulativeLast;
     uint256 private _pancakeSwapPriceCumulativeLast;
+    uint256 private _firstPeriodBlockTimestampLast;
+    uint256 private _secondPeriodBlockTimestampLast;
     uint32 private _blockTimestampLast;
     
     modifier onlyZoinks {
@@ -82,9 +85,9 @@ contract AveragePriceOracle is IAveragePriceOracle, Ownable, Initializable {
             "AveragePriceOracle: no reserves"
         );
         _blockTimestampLast = blockTimestamp;
-        _apeSwapPriceCumulativeLast = IPair(apeSwapPair_).price1CumulativeLast();
-        _biSwapPriceCumulativeLast = IPair(biSwapPair_).price1CumulativeLast();
-        _pancakeSwapPriceCumulativeLast = IPair(pancakeSwapPair_).price1CumulativeLast();
+        _apeSwapPriceCumulativeLast = IPair(apeSwapPair_).price0CumulativeLast();
+        _biSwapPriceCumulativeLast = IPair(biSwapPair_).price0CumulativeLast();
+        _pancakeSwapPriceCumulativeLast = IPair(pancakeSwapPair_).price0CumulativeLast();
     }
 
     /**
@@ -93,18 +96,28 @@ contract AveragePriceOracle is IAveragePriceOracle, Ownable, Initializable {
     * Called by the Zoinks contract once every 12 hours.
     */
     function update() external onlyZoinks {
+        uint256 currentTime = block.timestamp % 24 hours;
+        if (currentTime >= START_OF_THE_FIRST_PERIOD && currentTime < START_OF_THE_SECOND_PERIOD) {
+            require(
+                block.timestamp - _firstPeriodBlockTimestampLast >= 12 hours,
+                "AveragePriceOracle: TWAP has already been updated during the first period"
+            );
+            _firstPeriodBlockTimestampLast = block.timestamp;
+        } else {
+            require(
+                block.timestamp - _secondPeriodBlockTimestampLast >= 12 hours,
+                "AveragePriceOracle: TWAP has already been updated during the second period"
+            );
+            _secondPeriodBlockTimestampLast = block.timestamp;
+        }
         IPair(apeSwapPair).sync();
         IPair(biSwapPair).sync();
         IPair(pancakeSwapPair).sync();
         uint32 currentBlockTimestamp = _currentBlockTimestamp();
-        uint256 apeSwapPriceCumulative = IPair(apeSwapPair).price1CumulativeLast();
-        uint256 biSwapPriceCumulative = IPair(biSwapPair).price1CumulativeLast();
-        uint256 pancakeSwapPriceCumulative = IPair(pancakeSwapPair).price1CumulativeLast();
         uint256 timeElapsed = currentBlockTimestamp - _blockTimestampLast;
-        require(
-            timeElapsed >= PERIOD,
-            "AveragePriceOracle: period not elapsed"
-        );
+        uint256 apeSwapPriceCumulative = IPair(apeSwapPair).price0CumulativeLast();
+        uint256 biSwapPriceCumulative = IPair(biSwapPair).price0CumulativeLast();
+        uint256 pancakeSwapPriceCumulative = IPair(pancakeSwapPair).price0CumulativeLast();
         apeSwapAveragePriceLast =
             (apeSwapPriceCumulative - _apeSwapPriceCumulativeLast).div(timeElapsed).div(Q112);
         biSwapAveragePriceLast =

@@ -1,4 +1,4 @@
-const { emptyStage } = require('../../../helpers');
+const { emptyStage } = require('../../../../helpers');
 module.exports = emptyStage('First manual stage stage...');
 module.exports.tags = ["first_manual"];
 module.exports.dependencies = [

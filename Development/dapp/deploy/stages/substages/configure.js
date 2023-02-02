@@ -9,20 +9,45 @@ module.exports = async ({
   network
 }) => {
   const {execute, log} = deployments;
-  const {
-    deployer, 
-    authority,
-    recipient,
-    bdmWallet,
-    crmWallet,
-    devManagerWallet,
-    marketingManagerWallet,
-    devWallet,
-    marketingFundWallet,
-    situationalFundWallet,
-    seniorageWallet,
-    multisigWallet
-  } = network.name === 'tenderly' ? await getNamedAccountsFromTenderly(hre, log) : await getNamedAccounts();
+  
+  let deployer; 
+  let authority;
+  let recipient;
+  let bdmWallet;
+  let crmWallet;
+  let devManagerWallet;
+  let marketingManagerWallet;
+  let devWallet;
+  let marketingFundWallet;
+  let situationalFundWallet;
+  let multisigWallet;
+
+  if (network.name === 'bsc_mainnet') {
+    deployer = "0xf3CB3C06F29441010C7E9EE679C04668f83c9471"; // HD - 1
+    authority = "0xd50d221D64A940133Fa19e4E8D68dE38B2a80f3C"; // HD - 2
+    recipient = "0x32e7f724f8e20ebcabe6291867f56d0a2f7f934d"; // LunchBox (KuCoin BUSD) - 0x32e7f724f8e20ebcabe6291867f56d0a2f7f934d
+    bdmWallet = "0x467927774B59F7cB023863b07960669f958EC19a"; // Chris Address – (5%) split – 0x467927774B59F7cB023863b07960669f958EC19a
+    crmWallet = "0xc249aE80c56fE28628d5d3679651D45d96C9d0de"; // Andrew Address – (5%) split – 0xc249aE80c56fE28628d5d3679651D45d96C9d0de
+    devManagerWallet = "0x0B84e85d4cFF631224e5549D408EFde4843bDe1E"; // Artem Address – (5%) split – 0x0B84e85d4cFF631224e5549D408EFde4843bDe1E
+    marketingManagerWallet = "0x1e00D15771ed9c4cEfAe77528020DcaAce790243"; // Marketing Address – (5%) split 0x1e00D15771ed9c4cEfAe77528020DcaAce790243
+    devWallet = "0xdBace8f59843c8B43fab6A8f6329FC7D5d157C03"; // Dev Fund - 0xdBace8f59843c8B43fab6A8f6329FC7D5d157C03
+    marketingFundWallet = "0xAb9a33de8A4B024351Ea730F88ad9328f95d969b"; // Marketing Fund - 0xAb9a33de8A4B024351Ea730F88ad9328f95d969b
+    situationalFundWallet = "0xC26a67F424dDAA5Ce000Fa34a0ed518Daf205465"; // Situational Fund - 0xC26a67F424dDAA5Ce000Fa34a0ed518Daf205465
+    multisigWallet = "0x9EeBe68f49074f9DE70A1Dc04345DF3f17489183"; // EOA
+  } else {
+    const testnetAccounts = network.name === 'tenderly' ? await getNamedAccountsFromTenderly(hre, log) : await getNamedAccounts();
+    deployer = testnetAccounts.deployer;
+    authority = testnetAccounts.authority;
+    recipient = testnetAccounts.recipient;
+    bdmWallet = testnetAccounts.bdmWallet;
+    crmWallet = testnetAccounts.crmWallet;
+    devManagerWallet = testnetAccounts.devManagerWallet;
+    marketingManagerWallet = testnetAccounts.marketingManagerWallet;
+    devWallet = testnetAccounts.devWallet;
+    marketingFundWallet = testnetAccounts.marketingFundWallet;
+    situationalFundWallet = testnetAccounts.situationalFundWallet;
+    multisigWallet = testnetAccounts.multisigWallet;
+  }
 
   const rewardsDuration = ethers.BigNumber.from("43200");
 
@@ -72,7 +97,6 @@ module.exports = async ({
     hre.names.internal.poolRewardDistributor,
     {from: deployer, log: true},
     'configure',
-    busdAddress,
     zoinksTokenAddress,
     snacksAddress,
     btcSnacksAddress,
@@ -237,7 +261,6 @@ module.exports = async ({
     devWallet,
     marketingFundWallet,
     situationalFundWallet,
-    seniorageWallet,
     multisigWallet
   );
 } 
