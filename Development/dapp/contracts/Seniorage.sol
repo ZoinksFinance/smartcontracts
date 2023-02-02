@@ -2,39 +2,39 @@
 pragma solidity 0.8.15;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 import "./interfaces/IRouter.sol";
 import "./interfaces/ISnacksBase.sol";
 import "./interfaces/ILunchBox.sol";
+import "./interfaces/IZoinks.sol";
 
-/// @title Контракт, распределяющий приходящие на него комиссии и BUSD токены.
-contract Seniorage is Ownable {
+contract Seniorage is Ownable, Pausable {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    uint256 constant private BASE_PERCENT = 10000;
-    uint256 constant private BDM_WALLET_PERCENT = 500;
-    uint256 constant private CRM_WALLET_PERCENT = 500;
-    uint256 constant private DEV_MANAGER_WALLET_PERCENT = 500;
-    uint256 constant private MARKETING_MANAGER_WALLET_PERCENT = 500;
-    uint256 constant private DEV_WALLET_PERCENT = 1000;
-    uint256 constant private SITUATIONAL_FUND_WALLET_PERCENT = 1500;
-    uint256 constant private MARKETING_FUND_WALLET_PERCENT = 2000;
-    uint256 constant private FIRST_SWAP_ON_ZOINKS_PERCENT = 2000;
-    uint256 constant private SECOND_SWAP_ON_ZOINKS_PERCENT = 1500;
-    uint256 constant private SNACKS_SENIORAGE_PERCENT = 7500;
-    uint256 constant private SNACKS_PULSE_PERCENT = 2500;
-    uint256 constant private BTC_SNACKS_SENIORAGE_PERCENT = 6667;
-    uint256 constant private BTC_SNACKS_PULSE_PERCENT = 3333;
-    uint256 constant private ETH_SNACKS_SENIORAGE_PERCENT = 6667;
-    uint256 constant private ETH_SNACKS_PULSE_PERCENT = 3333;
-    uint256 constant private BTC_ETH_PERCENT = 750;
-    uint256 constant private LUNCH_BOX_PERCENT = 3000;
+    uint256 private constant BASE_PERCENT = 10000;
+    uint256 private constant BDM_WALLET_PERCENT = 500;
+    uint256 private constant CRM_WALLET_PERCENT = 500;
+    uint256 private constant DEV_MANAGER_WALLET_PERCENT = 500;
+    uint256 private constant MARKETING_MANAGER_WALLET_PERCENT = 500;
+    uint256 private constant DEV_WALLET_PERCENT = 1000;
+    uint256 private constant SITUATIONAL_FUND_WALLET_PERCENT = 1500;
+    uint256 private constant MARKETING_FUND_WALLET_PERCENT = 2000;
+    uint256 private constant SWAP_ON_BTC_ETH_PERCENT = 550;
+    uint256 private constant BTC_SNACKS_SENIORAGE_PERCENT = 5455;
+    uint256 private constant BTC_SNACKS_PULSE_PERCENT = 4545;
+    uint256 private constant ETH_SNACKS_SENIORAGE_PERCENT = 5455;
+    uint256 private constant ETH_SNACKS_PULSE_PERCENT = 4545;
+    uint256 private constant MINT_ZOINKS_PERCENT = 1500;
+    uint256 private constant SWAP_ON_ZOINKS_PERCENT = 300;
+    uint256 private constant LUNCH_BOX_PERCENT = 4600;
+    uint256 private constant MULTISIG_WALLET_PERCENT = 1000;
     
-    address public busd;
+    address public immutable busd;
+    address public immutable router;
     address public cakeLP;
     address public zoinks;
     address public btc;
@@ -45,7 +45,6 @@ contract Seniorage is Ownable {
     address public authority;
     address public pulse;
     address public lunchBox;
-    address public router;
     address public bdmWallet;
     address public crmWallet;
     address public devManagerWallet;
@@ -54,11 +53,16 @@ contract Seniorage is Ownable {
     address public marketingFundWallet;
     address public situationalFundWallet;
     address public seniorageWallet;
+    address public multisigWallet;
     uint256 public zoinksAmountStored;
     uint256 public btcAmountStored;
     uint256 public ethAmountStored;
 
     EnumerableSet.AddressSet private _nonBusdCurrencies;
+
+    event PulseUpdated(address indexed pulse);
+    event LunchBoxUpdated(address indexed lunchBox);
+    event AuthorityUpdated(address indexed authority);
 
     modifier onlyAuthority {
         require(
@@ -68,8 +72,10 @@ contract Seniorage is Ownable {
         _;
     }
     
-    /// @param busd_ Адрес BUSD токена.
-    /// @param router_ Адрес PancakeSwap роутера.
+    /**
+    * @param busd_ Binance-Peg BUSD token address.
+    * @param router_ Router contract address (from PancakeSwap DEX).
+    */
     constructor(
         address busd_,
         address router_
@@ -80,17 +86,15 @@ contract Seniorage is Ownable {
     }
     
     /**
-    * @notice Функция, реализующая логику установки адресов или их переустановки
-    * в случае редеплоя контрактов.
-    * @dev Если редеплоится какой-то один контракт, то на место тех адресов,
-    * которые не редеплоились, передаются старые значения.
-    * @param cakeLP_ Адрес Cake-LP токена (контракта пары).
-    * @param zoinks_ Адрес ZOINKS токена.
-    * @param btc_ Адрес BTC токена.
-    * @param eth_ Адрес ETH токена.
-    * @param snacks_ Адрес SNACKS токена.
-    * @param btcSnacks_ Адрес BTCSNACKS токена.
-    * @param ethSnacks_ Адрес ETHSNACKS токена.
+    * @notice Configures currency addresses.
+    * @dev Could be called by the owner in case of resetting addresses.
+    * @param cakeLP_ Pancake LPs token address.
+    * @param zoinks_ Zoinks token address.
+    * @param btc_ Binance-Peg BTCB token address.
+    * @param eth_ Binance-Peg Ethereum token address.
+    * @param snacks_ Snacks token address.
+    * @param btcSnacks_ BtcSnacks token address.
+    * @param ethSnacks_ EthSnacks token address.
     */
     function configureCurrencies(
         address cakeLP_,
@@ -127,6 +131,9 @@ contract Seniorage is Ownable {
         if (IERC20(zoinks_).allowance(address(this), snacks_) == 0) {
             IERC20(zoinks_).approve(snacks_, type(uint256).max);
         }
+        if (IERC20(busd).allowance(address(this), zoinks_) == 0) {
+            IERC20(busd).approve(zoinks_, type(uint256).max);
+        }
         if (IERC20(btc_).allowance(address(this), btcSnacks_) == 0) {
             IERC20(btc_).approve(btcSnacks_, type(uint256).max);
         }
@@ -136,9 +143,17 @@ contract Seniorage is Ownable {
     }
     
     /**
-    * @notice Функция, реализующая логику установки адресов или их переустановки.
-    * @dev Если меняется какой-то один адрес, то на место тех адресов,
-    * которые не менялись, передаются старые значения.
+    * @notice Configures wallet addresses.
+    * @dev Could be called by the owner in case of resetting addresses.
+    * @param bdmWallet_ Business development manager wallet.
+    * @param crmWallet_ Customer relationship manager wallet.
+    * @param devManagerWallet_ Development manager wallet.
+    * @param marketingManagerWallet_ Marketing manager wallet.
+    * @param devWallet_ Developers wallet.
+    * @param marketingFundWallet_ Marketing fund wallet.
+    * @param situationalFundWallet_ Situational fund wallet.
+    * @param seniorageWallet_ Seniorage wallet.
+    * @param multisigWallet_ Multisignature wallet.
     */
     function configureWallets(
         address bdmWallet_,
@@ -148,7 +163,8 @@ contract Seniorage is Ownable {
         address devWallet_,
         address marketingFundWallet_,
         address situationalFundWallet_,
-        address seniorageWallet_
+        address seniorageWallet_,
+        address multisigWallet_
     )
         external
         onlyOwner
@@ -161,16 +177,40 @@ contract Seniorage is Ownable {
         marketingFundWallet = marketingFundWallet_;
         situationalFundWallet = situationalFundWallet_;
         seniorageWallet = seniorageWallet_;
+        multisigWallet = multisigWallet_;
+    }
+
+    /**
+    * @notice Triggers stopped state.
+    * @dev Could be called by the owner in case of resetting addresses.
+    */
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    /**
+    * @notice Triggers stopped state.
+    * @dev Could be called by the owner in case of resetting addresses.
+    */
+    function unpause() external onlyOwner {
+        _unpause();
     }
     
-    /// @notice Функция, реализующая логику установки или переустановки контракта Pulse.
-    /// @param pulse_ Адрес контракта Pulse.
+    /**
+    * @notice Sets the Pulse contract address.
+    * @dev Could be called by the owner in case of address reset.
+    * @param pulse_ Pulse contract address.
+    */
     function setPulse(address pulse_) external onlyOwner {
         pulse = pulse_;
+        emit PulseUpdated(pulse_);
     }
     
-    /// @notice Функция, реализующая логику установки или переустановки контракта LunchBox.
-    /// @param lunchBox_ Адрес контракта LunchBox.
+    /**
+    * @notice Sets the LunchBox contract address.
+    * @dev Could be called by the owner in case of address reset.
+    * @param lunchBox_ LunchBox contract address.
+    */
     function setLunchBox(address lunchBox_) external onlyOwner {
         lunchBox = lunchBox_;
         IERC20(busd).approve(lunchBox_, type(uint256).max);
@@ -180,17 +220,38 @@ contract Seniorage is Ownable {
         IERC20(snacks).approve(lunchBox_, type(uint256).max);
         IERC20(btcSnacks).approve(lunchBox_, type(uint256).max);
         IERC20(ethSnacks).approve(lunchBox_, type(uint256).max);
+        emit LunchBoxUpdated(lunchBox_);
     }
     
-    /// @notice Функция, реализующая логику установки или переустановки authority адреса.
-    /// @param authority_ Адрес EOA, имеющего доступ к вызову функций контракта.
+    /**
+    * @notice Sets the authorised address.
+    * @dev Could be called by the owner in case of address reset.
+    * @param authority_ Authorised address.
+    */
     function setAuthority(address authority_) external onlyOwner {
         authority = authority_;
+        emit AuthorityUpdated(authority_);
     }
 
-    /// @notice Функция, реализующая логику распределения всех токенов на контракте, кроме BUSD.
-    /// @dev Функция может быть вызвана только authority адресом.
-    function distributeNonBusdCurrencies() external onlyAuthority {
+    /**
+    * @notice Distributes all currencies except the Binance-Peg BUSD token.
+    * @dev Called by the authorised address once every 12 hours.
+    * @param zoinksBusdAmountOutMin_ The minimal amount of tokens (slippage tolerance) for 
+    * Zoinks token to Binance-Peg BUSD token swap.
+    * @param btcBusdAmountOutMin_ The minimal amount of tokens (slippage tolerance) for 
+    * Binance-Peg BTCB token to Binance-Peg BUSD token swap.
+    * @param ethBusdAmountOutMin_ The minimal amount of tokens (slippage tolerance) for 
+    * Binance-Peg Ethereum token to Binance-Peg BUSD token swap.
+    */
+    function distributeNonBusdCurrencies(
+        uint256 zoinksBusdAmountOutMin_,
+        uint256 btcBusdAmountOutMin_,
+        uint256 ethBusdAmountOutMin_
+    ) 
+        external 
+        whenNotPaused 
+        onlyAuthority 
+    {
         for (uint256 i = 0; i < _nonBusdCurrencies.length(); i++) {
             address currency = _nonBusdCurrencies.at(i);
             uint256 balance;
@@ -234,50 +295,52 @@ contract Seniorage is Ownable {
                 );
             }
         }
-        _distributeNonBusdCurrenciesToLunchBox();
+        _distributeNonBusdCurrenciesToLunchBox(
+            zoinksBusdAmountOutMin_,
+            btcBusdAmountOutMin_,
+            ethBusdAmountOutMin_
+        );
     }
 
-    /*
-    * @notice Функция, реализующая логику распределения BUSD токенов на контракте.
-    * @dev Функция может быть вызвана только authority адресом.
-    * @param btcAmountOutMin_ Минимальное ожидаемое количество BTC
-    * токенов к получению после обмена 7.5% от общего баланса BUSD токенов.
-    * @param ethAmountOutMin_ Минимальное ожидаемое количество ETH
-    * токенов к получению после обмена 7.5% от общего баланса BUSD токенов.
-    * @param firstSwapZoinksAmountOutMin_ Минимальное ожидаемое количество ZOINKS
-    * токенов к получению после обмена 20% от общего баланса BUSD токенов.
-    * @param secondSwapZoinksAmountOutMin_ Минимальное ожидаемое количество ZOINKS
-    * токенов к получению после обмена 15% от общего баланса BUSD токенов.
-    * @param addLiquidityBusdAmountMin_ Минимальное ожидаемое количество BUSD
-    * токенов ко внесению ликвидности 15% от общего баланса BUSD токенов.
-    * @param addLiquidityZoinksAmountMin_ Минимальное ожидаемое количество ZOINKS
-    * токенов ко внесению ликвидности ZOINKS токенов в количестве, полученном
-    * после обмена 15% от общего баланса BUSD токенов.
+    /**
+    * @notice Distributes the Binance-Peg BUSD token.
+    * @dev Called by the authorised address once every 12 hours.
+    * @param btcAmountOutMin_ Minimum expected amount of Binance-Peg BTCB token 
+    * to be received after the exchange 5.5% of the total balance of Binance-Peg BUSD token.
+    * @param ethAmountOutMin_ Minimum expected amount of Binance-Peg Ethereum token 
+    * to be received after the exchange 5.5% of the total balance of Binance-Peg BUSD token.
+    * @param addLiquidityBusdAmountMin_ Minimum expected amount of Binance-Peg BUSD token 
+    * to add liquidity after the addition 15% of the total balance of Binance-Peg BUSD token.
+    * @param addLiquidityZoinksAmountMin_ Minimum expected amount of Zoinks token 
+    * to add liquidity in the amount received after the mint of 15% of the total balance 
+    * of Binance-Peg BUSD token.
+    * @param zoinksAmountOutMin_ Minimum expected amount of Zoinks token 
+    * to be received after the exchange 3% of the total balance of Binance-Peg BUSD token.
     */
     function distributeBusd(
         uint256 btcAmountOutMin_,
         uint256 ethAmountOutMin_,
-        uint256 firstSwapZoinksAmountOutMin_,
-        uint256 secondSwapZoinksAmountOutMin_,
         uint256 addLiquidityBusdAmountMin_,
-        uint256 addLiquidityZoinksAmountMin_
+        uint256 addLiquidityZoinksAmountMin_,
+        uint256 zoinksAmountOutMin_
     )
         external
+        whenNotPaused
         onlyAuthority
     {
         uint256 balance = IERC20(busd).balanceOf(address(this));
         if (balance != 0) {
-            // Обмен 7.5% от общего баланса BUSD токенов на BTC токены
-            uint256 amountToSwapOnBtcAndEth = balance * BTC_ETH_PERCENT / BASE_PERCENT;
+            // Exchange 5.5% of the total balance of Binance-Peg BUSD tokens on Binance-Peg BTCB tokens.
+            uint256 busdAmountToSwapOnBtcAndEth = balance * SWAP_ON_BTC_ETH_PERCENT / BASE_PERCENT;
             address[] memory path = new address[](2);
             path[0] = busd;
             path[1] = btc;
             uint256[] memory amounts = IRouter(router).swapExactTokensForTokens(
-                amountToSwapOnBtcAndEth,
+                busdAmountToSwapOnBtcAndEth,
                 btcAmountOutMin_,
                 path,
                 address(this),
-                block.timestamp + 15
+                block.timestamp
             );
             if (ISnacksBase(btcSnacks).sufficientPayTokenAmountOnMint(amounts[1] + btcAmountStored)) {
                 uint256 btcSnacksAmount = ISnacksBase(btcSnacks).mintWithPayTokenAmount(amounts[1] + btcAmountStored);
@@ -295,14 +358,14 @@ contract Seniorage is Ownable {
             } else {
                 btcAmountStored += amounts[1];
             }
-            // Обмен 7.5% от общего баланса BUSD токенов на ETH токены
+            // Exchange 5.5% of the total balance of Binance-Peg BUSD tokens on Binance-Peg Ethereum tokens.
             path[1] = eth;
             amounts = IRouter(router).swapExactTokensForTokens(
-                amountToSwapOnBtcAndEth,
+                busdAmountToSwapOnBtcAndEth,
                 ethAmountOutMin_,
                 path,
                 address(this),
-                block.timestamp + 15
+                block.timestamp
             );
             if (ISnacksBase(ethSnacks).sufficientPayTokenAmountOnMint(amounts[1] + ethAmountStored)) {
                 uint256 ethSnacksAmount = ISnacksBase(ethSnacks).mintWithPayTokenAmount(amounts[1] + ethAmountStored);
@@ -320,85 +383,81 @@ contract Seniorage is Ownable {
             } else {
                 ethAmountStored += amounts[1];
             }
-            // Обмен 20% от общего баланса BUSD токенов на ZOINKS токены
-            uint256 amountToSwapOnZoinks = balance * FIRST_SWAP_ON_ZOINKS_PERCENT / BASE_PERCENT;
+            // Mint Zoinks tokens on 15% of the total balance of Binance-Peg BUSD tokens.
+            uint256 busdAmountToSwapOnZoinks = balance * MINT_ZOINKS_PERCENT / BASE_PERCENT;
+            IZoinks(zoinks).mint(busdAmountToSwapOnZoinks);
+            // Adding liquidity on 15% of the total balance of Binance-Peg BUSD tokens.
+            (, , uint256 liquidity) = IRouter(router).addLiquidity(
+                busd,
+                zoinks,
+                busdAmountToSwapOnZoinks,
+                busdAmountToSwapOnZoinks,
+                addLiquidityBusdAmountMin_,
+                addLiquidityZoinksAmountMin_,
+                address(this),
+                block.timestamp
+            );
+            // Transfer Pancake LPs tokens to the Pulse contract.
+            IERC20(cakeLP).safeTransfer(pulse, liquidity);
+            // Exchange 3% of the total balance of Binance-Peg BUSD tokens on Zoinks tokens.
+            busdAmountToSwapOnZoinks = balance * SWAP_ON_ZOINKS_PERCENT / BASE_PERCENT;
             path[1] = zoinks;
             amounts = IRouter(router).swapExactTokensForTokens(
-                amountToSwapOnZoinks,
-                firstSwapZoinksAmountOutMin_,
+                busdAmountToSwapOnZoinks,
+                zoinksAmountOutMin_,
                 path,
                 address(this),
-                block.timestamp + 15
+                block.timestamp
             );
             if (ISnacksBase(snacks).sufficientPayTokenAmountOnMint(amounts[1] + zoinksAmountStored)) {
                 uint256 snacksAmount = ISnacksBase(snacks).mintWithPayTokenAmount(amounts[1] + zoinksAmountStored);
-                IERC20(snacks).safeTransfer(
-                    seniorageWallet,
-                    snacksAmount * SNACKS_SENIORAGE_PERCENT / BASE_PERCENT
-                );
-                IERC20(snacks).safeTransfer(
-                    pulse,
-                    snacksAmount * SNACKS_PULSE_PERCENT / BASE_PERCENT
-                );
+                IERC20(snacks).safeTransfer(pulse, snacksAmount);
                 if (zoinksAmountStored != 0) {
                     zoinksAmountStored = 0;
                 }
             } else {
                 zoinksAmountStored += amounts[1];
             }
-            // Обмен 15% от общего баланса BUSD токенов на ZOINKS токены
-            amountToSwapOnZoinks = balance * SECOND_SWAP_ON_ZOINKS_PERCENT / BASE_PERCENT;
-            amounts = IRouter(router).swapExactTokensForTokens(
-                amountToSwapOnZoinks,
-                secondSwapZoinksAmountOutMin_,
-                path,
-                address(this),
-                block.timestamp + 15
-            );
-            // Добавление ликвидности в размере полученных ZOINKS токенов после последнего обмена
-            (, , uint256 liquidity) = IRouter(router).addLiquidity(
-                busd,
-                zoinks,
-                amountToSwapOnZoinks,
-                amounts[1],
-                addLiquidityBusdAmountMin_,
-                addLiquidityZoinksAmountMin_,
-                address(this),
-                block.timestamp + 15
-            );
-            // Стейк 30% от общего баланса BUSD токенов в LunchBox
-            ILunchBox(lunchBox).stake(balance * LUNCH_BOX_PERCENT / BASE_PERCENT);
-            // Отправка Cake-LP токенов на контракт Pulse
-            IERC20(cakeLP).safeTransfer(pulse, liquidity);
+            // Deposit 46% of the total balance of Binance-Peg BUSD tokens in the LunchBox contract.
+            ILunchBox(lunchBox).stakeForSeniorage(balance * LUNCH_BOX_PERCENT / BASE_PERCENT);
+            // Transfer 10% of the total balance of Binance-Peg BUSD tokens to the multisignature wallet.
+            IERC20(busd).safeTransfer(multisigWallet, balance * MULTISIG_WALLET_PERCENT / BASE_PERCENT);
         }
     }
 
     /**
-    * @notice Функция, реализующая логику распределения оставшегося баланса
-    * всех токенов на контракте, кроме BUSD, в размере 35% на контракт LunchBox.
+    * @notice Deposits remaining balance of all currencies 
+    * except the Binance-Peg BUSD token in the LunchBox contract.
+    * @dev Called inside `distributeNonBusdCurrencies()` function.
     */
-    function _distributeNonBusdCurrenciesToLunchBox() private {
+    function _distributeNonBusdCurrenciesToLunchBox(
+        uint256 zoinksBusdAmountOutMin_,
+        uint256 btcBusdAmountOutMin_,
+        uint256 ethBusdAmountOutMin_
+    ) 
+        private 
+    {
         uint256 zoinksBalance = IERC20(zoinks).balanceOf(address(this)) - zoinksAmountStored;
         uint256 btcBalance = IERC20(btc).balanceOf(address(this)) - btcAmountStored;
         uint256 ethBalance = IERC20(eth).balanceOf(address(this)) - ethAmountStored;
-        uint256 snacksBalance = IERC20(snacks).balanceOf(address(this));
-        uint256 btcSnacksBalance = IERC20(btcSnacks).balanceOf(address(this));
-        uint256 ethSnacksBalance = IERC20(ethSnacks).balanceOf(address(this));
         if (
             zoinksBalance != 0 ||
             btcBalance != 0 ||
             ethBalance != 0 ||
-            snacksBalance != 0 ||
-            btcSnacksBalance != 0 ||
-            ethSnacksBalance != 0
+            IERC20(snacks).balanceOf(address(this)) != 0 ||
+            IERC20(btcSnacks).balanceOf(address(this)) != 0 ||
+            IERC20(ethSnacks).balanceOf(address(this)) != 0
         ) {
-            ILunchBox(lunchBox).stake(
+            ILunchBox(lunchBox).stakeForSeniorage(
                 zoinksBalance,
                 btcBalance,
                 ethBalance,
-                snacksBalance,
-                btcSnacksBalance,
-                ethSnacksBalance
+                IERC20(snacks).balanceOf(address(this)),
+                IERC20(btcSnacks).balanceOf(address(this)),
+                IERC20(ethSnacks).balanceOf(address(this)),
+                zoinksBusdAmountOutMin_,
+                btcBusdAmountOutMin_,
+                ethBusdAmountOutMin_
             );
         }
     }

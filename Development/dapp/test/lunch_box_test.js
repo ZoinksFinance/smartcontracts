@@ -1,118 +1,154 @@
-const { impersonateAccount, time } = require("@nomicfoundation/hardhat-network-helpers");
-const { expect } = require("chai");
-const { ethers, deployments, getNamedAccounts} = require("hardhat");
-
-const startImpersonating = async (address) => {
-    await hre.network.provider.request({
-        method: "hardhat_impersonateAccount",
-        params: [address]
-    });
-    await hre.network.provider.send("hardhat_setBalance", [address, ethers.utils.parseEther("1000.0").toHexString().replace("0x0", "0x")]);
-}
-
-const stopImpersonating = async (address) => {
-    await hre.network.provider.request({
-        method: "hardhat_stopImpersonatingAccount",
-        params: [address]
-    });
-}
+const {time} = require("@nomicfoundation/hardhat-network-helpers");
+const {expect} = require("chai");
+const hre = require("hardhat");
+const {
+  mockedResultOfSwap, 
+  withImpersonatedSigner, 
+  mintNativeTokens, 
+  ZERO,
+  mintZoinksAndAllSnacks,
+  mockSwaps
+} = require('../deploy/helpers');
+const {ethers, deployments, getNamedAccounts} = hre;
 
 describe("LunchBox", () => {
+
+    let recipient;
+    let owner;
+    let authority;
+
+    let lunchBox;
+    let busd;
+    let zoinks;
+    let btc;
+    let eth;
+    let snacks;
+    let btcSnacks;
+    let ethSnacks;
+    let router;
+    let snacksPool;
+    let poolRewardDistributor;
+
+    let amountToStake;
+  
     beforeEach(async () => {
         await deployments.fixture(['lunch_box_test_fixtures']);
         const accounts = await getNamedAccounts();
         recipient = accounts.recipient;
-        [owner] = await ethers.getSigners();
+        [owner, authority] = await ethers.getSigners();
+        
         lunchBox = await ethers.getContractAt(
-            "LunchBox", 
-            (await deployments.get('LunchBox')).address
+            hre.names.internal.lunchBox, 
+            (await deployments.get(hre.names.internal.lunchBox)).address
         );
         busd = await ethers.getContractAt(
-            'MockToken',
-            (await deployments.get('BUSD')).address
+            hre.names.internal.mockToken,
+            (await deployments.get(hre.names.external.tokens.busd)).address
         );
         zoinks = await ethers.getContractAt(
-            'Zoinks',
-            (await deployments.get('Zoinks')).address
+            hre.names.internal.zoinks,
+            (await deployments.get(hre.names.internal.zoinks)).address
         );
         btc = await ethers.getContractAt(
-            'MockToken',
-            (await deployments.get('BTC')).address
+            hre.names.internal.mockToken,
+            (await deployments.get(hre.names.external.tokens.btc)).address
         );
         eth = await ethers.getContractAt(
-            'MockToken',
-            (await deployments.get('ETH')).address
+            hre.names.internal.mockToken,
+            (await deployments.get(hre.names.external.tokens.eth)).address
         );
         snacks = await ethers.getContractAt(
-            'Snacks',
-            (await deployments.get('Snacks')).address
+            hre.names.internal.snacks,
+            (await deployments.get(hre.names.internal.snacks)).address
         );
         btcSnacks = await ethers.getContractAt(
-            'BtcSnacks',
-            (await deployments.get('BtcSnacks')).address
+            hre.names.internal.btcSnacks,
+            (await deployments.get(hre.names.internal.btcSnacks)).address
         );
         ethSnacks = await ethers.getContractAt(
-            'EthSnacks',
-            (await deployments.get('EthSnacks')).address
+            hre.names.internal.ethSnacks,
+            (await deployments.get(hre.names.internal.ethSnacks)).address
         );
         router = await ethers.getContractAt(
-            'IRouter',
-            (await deployments.get('PancakeSwapRouter')).address
+            hre.names.internal.iRouter,
+            (await deployments.get(hre.names.external.routers.pancake)).address
         );
         seniorage = await ethers.getContractAt(
-            'Seniorage',
-            (await deployments.get('Seniorage')).address
+            hre.names.internal.seniorage,
+            (await deployments.get(hre.names.internal.seniorage)).address
         );
         snacksPool = await ethers.getContractAt(
-            'SnacksPool',
-            (await deployments.get('SnacksPool')).address
+            hre.names.internal.snacksPool,
+            (await deployments.get(hre.names.internal.snacksPool)).address
         );
         poolRewardDistributor = await ethers.getContractAt(
-            'PoolRewardDistributor',
-            (await deployments.get('PoolRewardDistributor')).address
+            hre.names.internal.poolRewardDistributor,
+            (await deployments.get(hre.names.internal.poolRewardDistributor)).address
         );
         amountToStake = ethers.utils.parseEther("950");
-        feeAmount = ethers.utils.parseEther("50");
-        amountToBuyZoinks = ethers.utils.parseEther("100000");
-        // Zoinks purchase
-        await busd.approve(zoinks.address, amountToBuyZoinks);
-        await zoinks.mint(amountToBuyZoinks);
-        // Snacks purchase
-        await zoinks.approve(snacks.address, amountToStake);
-        await snacks.mintWithBuyTokenAmount(amountToStake.add(feeAmount));
-        // BtcSnacks purchase
-        await btc.approve(btcSnacks.address, amountToStake);
-        await btcSnacks.mintWithBuyTokenAmount(amountToStake.add(feeAmount));
-        // EthSnacks purchase
-        await eth.approve(ethSnacks.address, amountToStake);
-        await ethSnacks.mintWithBuyTokenAmount(amountToStake.add(feeAmount));
-        // Seniorage impersonationg
-        await startImpersonating(seniorage.address);
-        seniorageSigner = await ethers.getSigner(seniorage.address);
-        // SnacksPool impersonationg
-        await startImpersonating(snacksPool.address);
-        snacksPoolSigner = await ethers.getSigner(snacksPool.address);
+
+        await mintZoinksAndAllSnacks(deployments, owner, amountToStake);
+        await mintZoinksAndAllSnacks(deployments, owner, amountToStake, authority);
+        
+        const hexAmountOfNativeTokens = '0x10000000000000000000';
+        await mintNativeTokens(seniorage.address, hexAmountOfNativeTokens);
+        await mintNativeTokens(snacksPool.address, hexAmountOfNativeTokens);
+        await mintNativeTokens(poolRewardDistributor.address, hexAmountOfNativeTokens);
+        await mintNativeTokens(lunchBox.address, hexAmountOfNativeTokens);
     });
 
-    it("Successful stake() execution by Seniorage (BUSD)", async() => {
+    it("Successful configure()", async() => {
+        await expect(lunchBox.connect(authority).configure(
+            zoinks.address,
+            snacks.address,
+            btcSnacks.address,
+            ethSnacks.address,
+            snacksPool.address,
+            poolRewardDistributor.address,
+            seniorage.address
+        )).to.be.revertedWith("Ownable: caller is not the owner");
+        await lunchBox.configure(
+            zoinks.address,
+            snacks.address,
+            btcSnacks.address,
+            ethSnacks.address,
+            snacksPool.address,
+            poolRewardDistributor.address,
+            seniorage.address
+        );
+    });
+
+    it("Successful stakeForSeniorage() execution by Seniorage (BUSD)", async() => {
+      await withImpersonatedSigner(seniorage.address, async (seniorageSigner) => {
         // Attempt to stake from owner
-        await expect(lunchBox["stake(uint256)"](amountToStake))
-            .to.be.revertedWith("LunchBox: caller is not the Seniorage contract");
+        await expect(lunchBox["stakeForSeniorage(uint256)"](amountToStake))
+          .to.be.revertedWith("LunchBox: caller is not the Seniorage contract");
         // Stake from Seniorage
         await busd.transfer(seniorage.address, amountToStake);
-        await busd.connect(seniorageSigner).approve(lunchBox.address, amountToStake);
-        await lunchBox.connect(seniorageSigner)["stake(uint256)"](amountToStake);
+        await lunchBox.connect(seniorageSigner)["stakeForSeniorage(uint256)"](amountToStake);
         // Check recipient balance
         expect(await busd.balanceOf(recipient)).to.equal(amountToStake);
         // Zero stake from Seniorage
-        await lunchBox.connect(seniorageSigner)["stake(uint256)"](0);
+        await expect(lunchBox.connect(seniorageSigner)["stakeForSeniorage(uint256)"](0))
+          .to.emit(lunchBox, 'Staked').withArgs(seniorageSigner.address, 0);
+      });
     });
 
-    it("Successful stake() execution by Seniorage (non BUSD currencies)", async() => {
+    it("Successful stakeForSeniorage() execution by Seniorage (non BUSD currencies)", async() => {
+      await withImpersonatedSigner(seniorage.address, async (seniorageSigner) => {
         // Attempt to stake from owner
-        await expect(lunchBox["stake(uint256,uint256,uint256,uint256,uint256,uint256)"]
-            (amountToStake, amountToStake, amountToStake, amountToStake, amountToStake, amountToStake))
-            .to.be.revertedWith("LunchBox: caller is not the Seniorage contract");
+        await expect(lunchBox["stakeForSeniorage(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"]
+          (
+            amountToStake, 
+            amountToStake, 
+            amountToStake, 
+            amountToStake, 
+            amountToStake, 
+            amountToStake,
+            0,
+            0,
+            0
+          )).to.be.revertedWith("LunchBox: caller is not the Seniorage contract");
         // Stake from Seniorage
         await zoinks.transfer(seniorage.address, amountToStake);
         await btc.transfer(seniorage.address, amountToStake);
@@ -120,103 +156,443 @@ describe("LunchBox", () => {
         await snacks.transfer(seniorage.address, amountToStake);
         await btcSnacks.transfer(seniorage.address, amountToStake);
         await ethSnacks.transfer(seniorage.address, amountToStake);
-        await zoinks.connect(seniorageSigner).approve(lunchBox.address, amountToStake);
-        await btc.connect(seniorageSigner).approve(lunchBox.address, amountToStake);
-        await eth.connect(seniorageSigner).approve(lunchBox.address, amountToStake);
-        await snacks.connect(seniorageSigner).approve(lunchBox.address, amountToStake);
-        await btcSnacks.connect(seniorageSigner).approve(lunchBox.address, amountToStake);
-        await ethSnacks.connect(seniorageSigner).approve(lunchBox.address, amountToStake);
         await busd.mint(lunchBox.address, ethers.utils.parseEther("6"));
         await lunchBox.connect(seniorageSigner)
-            ["stake(uint256,uint256,uint256,uint256,uint256,uint256)"]
-            (amountToStake, amountToStake, amountToStake, amountToStake, amountToStake, amountToStake);
+          ["stakeForSeniorage(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"]
+          (
+            amountToStake, 
+            amountToStake, 
+            amountToStake, 
+            amountToStake, 
+            amountToStake, 
+            amountToStake,
+            0,
+            0,
+            0
+          );
         // Check recipient balance
         expect(await busd.balanceOf(recipient)).to.equal(ethers.utils.parseEther("6"));
-        // LunchBox impersonating
-        await startImpersonating(lunchBox.address);
-        const lunchBoxSigner = await ethers.getSigner(lunchBox.address);
-        // Transfer all tokens from LunchBox
-        const zoinksBalance = await zoinks.balanceOf(lunchBox.address);
-        const btcBalance = await btc.balanceOf(lunchBox.address);
-        const ethBalance = await eth.balanceOf(lunchBox.address);
-        const snacksBalance = await snacks.balanceOf(lunchBox.address);
-        const btcSnacksBalance = await btcSnacks.balanceOf(lunchBox.address);
-        const ethSnacksBalance = await ethSnacks.balanceOf(lunchBox.address);
-        await zoinks.connect(lunchBoxSigner).transfer(seniorage.address, zoinksBalance);
-        await btc.connect(lunchBoxSigner).transfer(seniorage.address, btcBalance);
-        await eth.connect(lunchBoxSigner).transfer(seniorage.address, ethBalance);
-        await snacks.connect(lunchBoxSigner).transfer(seniorage.address, snacksBalance);
-        await btcSnacks.connect(lunchBoxSigner).transfer(seniorage.address, btcSnacksBalance);
-        await ethSnacks.connect(lunchBoxSigner).transfer(seniorage.address, ethSnacksBalance);
-        // Zero stake from Seniorage
-        await lunchBox.connect(seniorageSigner)
-            ["stake(uint256,uint256,uint256,uint256,uint256,uint256)"]
-            (0, 0, 0, 0, 0, 0);
-        await stopImpersonating(lunchBox.address);
+        await withImpersonatedSigner(lunchBox.address, async (lunchBoxSigner) => {
+          // Transfer all tokens from LunchBox
+          const zoinksBalance = await zoinks.balanceOf(lunchBox.address);
+          const btcBalance = await btc.balanceOf(lunchBox.address);
+          const ethBalance = await eth.balanceOf(lunchBox.address);
+          const snacksBalance = await snacks.balanceOf(lunchBox.address);
+          const btcSnacksBalance = await btcSnacks.balanceOf(lunchBox.address);
+          const ethSnacksBalance = await ethSnacks.balanceOf(lunchBox.address);
+          await zoinks.connect(lunchBoxSigner).transfer(seniorage.address, zoinksBalance);
+          await btc.connect(lunchBoxSigner).transfer(seniorage.address, btcBalance);
+          await eth.connect(lunchBoxSigner).transfer(seniorage.address, ethBalance);
+          await snacks.connect(lunchBoxSigner).transfer(seniorage.address, snacksBalance);
+          await btcSnacks.connect(lunchBoxSigner).transfer(seniorage.address, btcSnacksBalance);
+          await ethSnacks.connect(lunchBoxSigner).transfer(seniorage.address, ethSnacksBalance);
+          // Zero stake from Seniorage
+          await expect(lunchBox.connect(seniorageSigner)
+            ["stakeForSeniorage(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"]
+            (0, 0, 0, 0, 0, 0, 0, 0, 0))
+              .to.emit(lunchBox, 'Staked')
+              .withArgs(seniorageSigner.address, 0);
+        });
+      });
     });
 
-    it("Successful stake() execution by SnacksPool", async() => {
-        // Attempt to stake from owner
-        await expect(lunchBox["stake(address,uint256,uint256,uint256)"]
-            (owner.address, amountToStake, amountToStake, amountToStake))
-            .to.be.revertedWith("LunchBox: caller is not the SnacksPool contract");
-        // Stake from SnacksPool
-        await snacks.transfer(snacksPool.address, amountToStake);
-        await btcSnacks.transfer(snacksPool.address, amountToStake);
-        await ethSnacks.transfer(snacksPool.address, amountToStake);
-        await snacks.connect(snacksPoolSigner).approve(lunchBox.address, amountToStake);
-        await btcSnacks.connect(snacksPoolSigner).approve(lunchBox.address, amountToStake);
-        await ethSnacks.connect(snacksPoolSigner).approve(lunchBox.address, amountToStake);
+    it("Successful stakeForSeniorage() execution by Seniorage (non BUSD currencies and insufficient amount on redeem)", async() => {
+      await withImpersonatedSigner(seniorage.address, async (seniorageSigner) => {
+        const insufficientAmount = 10;
+        const sufficientAmount = amountToStake.div(2);
+        // Stake from Seniorage
+        await zoinks.transfer(seniorage.address, sufficientAmount);
+        await btc.transfer(seniorage.address, sufficientAmount);
+        await eth.transfer(seniorage.address, sufficientAmount);
+        await snacks.transfer(seniorage.address, insufficientAmount);
+        await btcSnacks.transfer(seniorage.address, insufficientAmount);
+        await ethSnacks.transfer(seniorage.address, insufficientAmount);
         await busd.mint(lunchBox.address, ethers.utils.parseEther("6"));
-        await lunchBox.connect(snacksPoolSigner)
-            ["stake(address,uint256,uint256,uint256)"]
-            (owner.address, amountToStake, amountToStake, amountToStake);
-        // Check recipient/owner balances and totalSupply
-        expect(await busd.balanceOf(recipient)).to.equal(ethers.utils.parseEther("6"));
-        expect(await lunchBox.balances(owner.address)).to.equal(ethers.utils.parseEther("6"));
-        expect(await lunchBox.totalSupply()).to.equal(ethers.utils.parseEther("6"));
-        // LunchBox impersonating
-        await startImpersonating(lunchBox.address);
-        const lunchBoxSigner = await ethers.getSigner(lunchBox.address);
-        // Transfer all tokens from LunchBox
-        const snacksBalance = await snacks.balanceOf(lunchBox.address);
-        const btcSnacksBalance = await btcSnacks.balanceOf(lunchBox.address);
-        const ethSnacksBalance = await ethSnacks.balanceOf(lunchBox.address);
-        await snacks.connect(lunchBoxSigner).transfer(seniorage.address, snacksBalance);
-        await btcSnacks.connect(lunchBoxSigner).transfer(seniorage.address, btcSnacksBalance);
-        await ethSnacks.connect(lunchBoxSigner).transfer(seniorage.address, ethSnacksBalance);
-        // Zero stake from SnacksPool
-        await lunchBox.connect(snacksPoolSigner)
-            ["stake(address,uint256,uint256,uint256)"]
-            (owner.address, 0, 0, 0);
-            await stopImpersonating(lunchBox.address);
+        await lunchBox.connect(seniorageSigner)
+          ["stakeForSeniorage(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"]
+          (
+            sufficientAmount, 
+            sufficientAmount, 
+            sufficientAmount, 
+            insufficientAmount, 
+            insufficientAmount, 
+            insufficientAmount,
+            0,
+            0,
+            0
+          );
+        // Stored amounts check
+        expect(await lunchBox.snacksAmountStoredFor(seniorage.address)).to.equal(insufficientAmount);
+        expect(await lunchBox.btcSnacksAmountStoredFor(seniorage.address)).to.equal(insufficientAmount);
+        expect(await lunchBox.ethSnacksAmountStoredFor(seniorage.address)).to.equal(insufficientAmount);
+        // Another stake from Seniorage
+        await zoinks.transfer(seniorage.address, sufficientAmount);
+        await btc.transfer(seniorage.address, sufficientAmount);
+        await eth.transfer(seniorage.address, sufficientAmount);
+        await snacks.transfer(seniorage.address, sufficientAmount);
+        await btcSnacks.transfer(seniorage.address, sufficientAmount);
+        await ethSnacks.transfer(seniorage.address, sufficientAmount);
+        await busd.mint(lunchBox.address, ethers.utils.parseEther("6"));
+        await lunchBox.connect(seniorageSigner)
+          ["stakeForSeniorage(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"]
+          (
+            sufficientAmount, 
+            sufficientAmount, 
+            sufficientAmount, 
+            sufficientAmount, 
+            sufficientAmount, 
+            sufficientAmount,
+            0,
+            0,
+            0
+          );
+        // Stored amounts check
+        expect(await lunchBox.snacksAmountStoredFor(seniorage.address)).to.equal(0);
+        expect(await lunchBox.btcSnacksAmountStoredFor(seniorage.address)).to.equal(0);
+        expect(await lunchBox.ethSnacksAmountStoredFor(seniorage.address)).to.equal(0);
+      });
+    });
+
+    it("Successful stakeForSnacksPool() execution by SnacksPool", async() => {
+      await expect(lunchBox.stakeForSnacksPool(amountToStake, amountToStake, amountToStake, 0, 0, 0))
+        .to.be.revertedWith("LunchBox: caller is not the SnacksPool contract");
+      
+      await withImpersonatedSigner(snacksPool.address, async (snacksPoolSigner) => {
+        // Stake from SnacksPool
+        const totalRewardAmount = amountToStake.div(2); // 950 / 2 = 475
+        const amountSnacksToStake = amountToStake.div(10); // 950 / 10 = 95
+        await snacks.transfer(snacksPool.address, totalRewardAmount);
+        await btcSnacks.transfer(snacksPool.address, totalRewardAmount);
+        await ethSnacks.transfer(snacksPool.address, totalRewardAmount);
+        
+        await busd.mint(lunchBox.address, totalRewardAmount);
+        
+        await withImpersonatedSigner(poolRewardDistributor.address, async (poolRewardDistributorSigner) => {
+          await snacksPool.connect(poolRewardDistributorSigner).notifyRewardAmount(snacks.address, totalRewardAmount);
+          await snacksPool.connect(poolRewardDistributorSigner).notifyRewardAmount(ethSnacks.address, totalRewardAmount);
+          await snacksPool.connect(poolRewardDistributorSigner).notifyRewardAmount(btcSnacks.address, totalRewardAmount);
+          await lunchBox.connect(poolRewardDistributorSigner).notifyRewardAmount(totalRewardAmount);
+        });
+
+        await snacks.approve(snacksPool.address, amountSnacksToStake);
+        await snacksPool.stake(amountSnacksToStake);
+        await snacksPool.activateLunchBox();
+
+        await snacks.connect(authority).approve(snacksPool.address, amountSnacksToStake);
+        await snacksPool.connect(authority).stake(amountSnacksToStake);
+        await snacksPool.connect(authority).activateLunchBox();
+
+        await time.increase(3600 * 12 * 2);
+        
+        let expectedTotalRewardAmountForParticipantsInSnacks = ZERO;
+        let expectedTotalRewardAmountForParticipantsInBtcSnacks = ZERO;
+        let expectedTotalRewardAmountForParticipantsInEthSnacks = ZERO;
+        let participants = [owner.address, authority.address];
+
+        for (const participant of participants) {
+          expectedTotalRewardAmountForParticipantsInSnacks =
+            expectedTotalRewardAmountForParticipantsInSnacks
+              .add(await snacksPool.earned(participant, snacks.address));
+          expectedTotalRewardAmountForParticipantsInBtcSnacks =
+            expectedTotalRewardAmountForParticipantsInBtcSnacks
+              .add(await snacksPool.earned(participant, btcSnacks.address));
+          
+          expectedTotalRewardAmountForParticipantsInEthSnacks =
+            expectedTotalRewardAmountForParticipantsInEthSnacks
+              .add(await snacksPool.earned(participant, ethSnacks.address));
+        }
+        await expect(
+          snacksPool.connect(authority).deliverRewardsForAllLunchBoxParticipants(
+            expectedTotalRewardAmountForParticipantsInSnacks,
+            expectedTotalRewardAmountForParticipantsInBtcSnacks,
+            expectedTotalRewardAmountForParticipantsInEthSnacks,
+            0,
+            0,
+            0
+          )
+        ).to.emit(snacksPool, 'RewardsDelivered').withArgs(
+          expectedTotalRewardAmountForParticipantsInSnacks,
+          expectedTotalRewardAmountForParticipantsInBtcSnacks,
+          expectedTotalRewardAmountForParticipantsInEthSnacks,
+          0,
+          0,
+          0
+        );
+
+        await time.increase(3600 * 12 * 2);
+
+        const expectedEarnedOfOwner = await snacksPool.getBalance(owner.address);
+        const userRewardPerTokenPaidOfOwner = await lunchBox.userRewardPerTokenPaid(owner.address);
+
+        const expectedEarnedOfAuthority = await snacksPool.getBalance(authority.address);
+        const userRewardPerTokenPaidOfAuthority = await lunchBox.userRewardPerTokenPaid(authority.address);
+
+        const rewardPerToken = await lunchBox.rewardPerToken();
+        const precision = hre.ethers.utils.parseEther('1');
+        const ownerStoredReward = await lunchBox.rewards(owner.address);
+        const authorityStoredReward = await lunchBox.rewards(authority.address);
+
+        expect(await lunchBox.earned(owner.address)).to.be.equal(
+          expectedEarnedOfOwner
+            .mul(rewardPerToken.sub(userRewardPerTokenPaidOfOwner))
+            .div(precision)
+            .add(ownerStoredReward)
+        );
+        
+        expect(await lunchBox.earned(authority.address)).to.be.equal(
+          expectedEarnedOfAuthority
+            .mul(rewardPerToken.sub(userRewardPerTokenPaidOfAuthority))
+            .div(precision)
+            .add(authorityStoredReward)
+        );
+      });
+    });
+
+    it("Successful stakeForSnacksPool() execution by SnacksPool (insufficient amount on redeem)", async() => {
+        const insufficientAmount = 10;
+        const sufficientAmount = amountToStake.div(2);
+        // Stake from SnacksPool
+        await snacks.transfer(snacksPool.address, insufficientAmount);
+        await btcSnacks.transfer(snacksPool.address, insufficientAmount);
+        await ethSnacks.transfer(snacksPool.address, insufficientAmount);
+        await busd.mint(lunchBox.address, hre.ethers.utils.parseEther("6"));
+
+        await withImpersonatedSigner(snacksPool.address, async (snacksPoolSigner) => {
+          await lunchBox.connect(snacksPoolSigner)
+            .stakeForSnacksPool(insufficientAmount, insufficientAmount, insufficientAmount, 0, 0, 0);
+        });
+        // Stored amounts check
+        expect(await lunchBox.snacksAmountStoredFor(snacksPool.address)).to.equal(insufficientAmount);
+        expect(await lunchBox.btcSnacksAmountStoredFor(snacksPool.address)).to.equal(insufficientAmount);
+        expect(await lunchBox.ethSnacksAmountStoredFor(snacksPool.address)).to.equal(insufficientAmount);
+        // Another stake from SnacksPool
+        await snacks.transfer(snacksPool.address, sufficientAmount);
+        await btcSnacks.transfer(snacksPool.address, sufficientAmount);
+        await ethSnacks.transfer(snacksPool.address, sufficientAmount);
+        await busd.mint(lunchBox.address, hre.ethers.utils.parseEther("6"));
+        
+        await withImpersonatedSigner(snacksPool.address, async (snacksPoolSigner) => {
+          await lunchBox.connect(snacksPoolSigner)
+            .stakeForSnacksPool(sufficientAmount, sufficientAmount, sufficientAmount, 0, 0, 0);
+        });
+        // Stored amounts check
+        expect(await lunchBox.snacksAmountStoredFor(snacksPool.address)).to.equal(0);
+        expect(await lunchBox.btcSnacksAmountStoredFor(snacksPool.address)).to.equal(0);
+        expect(await lunchBox.ethSnacksAmountStoredFor(snacksPool.address)).to.equal(0);
+
+        await withImpersonatedSigner(snacksPool.address, async (snacksPoolSigner) => {
+          await expect(lunchBox.connect(snacksPoolSigner)
+            .stakeForSnacksPool(0, 0, 0, 0, 0, 0)).to.emit(lunchBox, 'Staked').withArgs(snacksPoolSigner.address, 0);
+        });
     });
 
     it("Successful getReward() execution", async() => {
+      await withImpersonatedSigner(snacksPool.address, async (snacksPoolSigner) => {
         await lunchBox.connect(snacksPoolSigner).getReward(owner.address);
-        // Stake from SnacksPool
-        await snacks.transfer(snacksPool.address, amountToStake);
-        await btcSnacks.transfer(snacksPool.address, amountToStake);
-        await ethSnacks.transfer(snacksPool.address, amountToStake);
-        await snacks.connect(snacksPoolSigner).approve(lunchBox.address, amountToStake);
-        await btcSnacks.connect(snacksPoolSigner).approve(lunchBox.address, amountToStake);
-        await ethSnacks.connect(snacksPoolSigner).approve(lunchBox.address, amountToStake);
-        await busd.mint(lunchBox.address, ethers.utils.parseEther("6"));
+      });
+      // Stake from owner to SnacksPool
+      await snacks.approve(snacksPool.address, ethers.utils.parseEther("1"));
+      await snacksPool.stake(ethers.utils.parseEther("1"));
+      await snacksPool.activateLunchBox();
+      // Stake from SnacksPool
+      await snacks.transfer(snacksPool.address, amountToStake);
+      await btcSnacks.transfer(snacksPool.address, amountToStake);
+      await ethSnacks.transfer(snacksPool.address, amountToStake);
+      await busd.mint(lunchBox.address, hre.ethers.utils.parseEther("6"));
+      
+      await withImpersonatedSigner(snacksPool.address, async (snacksPoolSigner) => {
         await lunchBox.connect(snacksPoolSigner)
-            ["stake(address,uint256,uint256,uint256)"]
-            (owner.address, amountToStake, amountToStake, amountToStake);
-        // Notify LunchBox about reward
-        await startImpersonating(poolRewardDistributor.address);
-        const poolRewardDistributorSigner = await ethers.getSigner(poolRewardDistributor.address);
-        await busd.transfer(lunchBox.address, amountToStake);
+          .stakeForSnacksPool(amountToStake, amountToStake, amountToStake, 0, 0, 0);
+      });
+      
+      // Notify LunchBox about reward
+      await busd.transfer(lunchBox.address, amountToStake);
+      
+      await withImpersonatedSigner(poolRewardDistributor.address, async (poolRewardDistributorSigner) => {
         await lunchBox.connect(poolRewardDistributorSigner).notifyRewardAmount(amountToStake);
-        // Transfer ZOINKS to LunchBox (after swap balance)
-        await zoinks.transfer(lunchBox.address, ethers.utils.parseEther("2"));
-        await time.increase(84000);
-        // Get reward
+      });
+      
+      // Transfer ZOINKS to LunchBox (after swap balance)
+      await zoinks.transfer(lunchBox.address, ethers.utils.parseEther("2"));
+      await time.increase(84000);
+      const balanceBefore = await snacks.balanceOf(owner.address);
+      // Get reward
+      await withImpersonatedSigner(snacksPool.address, async (snacksPoolSigner) => {
         await lunchBox.connect(snacksPoolSigner).getReward(owner.address);
-        // Check balance
-        const snacksReward = ethers.utils.parseEther("1766.79629925756985");
-        expect(await snacks.balanceOf(owner.address)).to.equal(snacksReward);
+      });
+      // Check balance
+      const snacksReward = ethers.utils.parseEther("30.484140580694025");
+      expect(await snacks.balanceOf(owner.address)).to.equal(balanceBefore.add(snacksReward));
+    });
+
+    it("Successful getReward() execution (insufficient amount on redeem)", async() => {
+      const insufficientAmount = 100;
+
+      await withImpersonatedSigner(snacksPool.address, async (snacksPoolSigner) => {
+        await lunchBox.connect(snacksPoolSigner).getReward(owner.address);
+      });
+      
+      await snacks.approve(snacksPool.address, hre.ethers.utils.parseEther("1"));
+      await snacksPool.stake(hre.ethers.utils.parseEther("1"));
+      await snacksPool.activateLunchBox();
+      
+      // Stake from SnacksPool
+      await snacks.transfer(snacksPool.address, amountToStake);
+      await btcSnacks.transfer(snacksPool.address, amountToStake);
+      await ethSnacks.transfer(snacksPool.address, amountToStake);
+      await busd.mint(lunchBox.address, ethers.utils.parseEther("6"));
+      
+      await withImpersonatedSigner(snacksPool.address, async (snacksPoolSigner) => {
+        await lunchBox.connect(snacksPoolSigner)
+          .stakeForSnacksPool(amountToStake, amountToStake, amountToStake, 0, 0, 0);
+      });
+      
+      // Notify LunchBox about reward
+      await busd.transfer(lunchBox.address, amountToStake);
+
+      await withImpersonatedSigner(poolRewardDistributor.address, async (poolRewardDistributorSigner) => {
+        await lunchBox.connect(poolRewardDistributorSigner).notifyRewardAmount(amountToStake);
+      });
+      
+      // Transfer ZOINKS to LunchBox (after swap balance)
+      await zoinks.transfer(lunchBox.address, insufficientAmount);
+      await time.increase(84000);
+      // Get reward
+      await mockSwaps(
+          "PancakeSwapRouter",
+          deployments,
+          0,
+          owner.address,
+          insufficientAmount
+      );
+      const balanceBefore = await snacks.balanceOf(owner.address);
+      
+      await withImpersonatedSigner(snacksPool.address, async (snacksPoolSigner) => {
+        await lunchBox.connect(snacksPoolSigner).getReward(owner.address);
+      });
+      
+      // Check stored amount
+      expect(await snacks.balanceOf(owner.address)).to.equal(balanceBefore);
+      expect(await lunchBox.zoinksAmountStoredFor(owner.address)).to.equal(insufficientAmount);
+      // Notify LunchBox about reward
+      await busd.transfer(lunchBox.address, amountToStake);
+
+      await withImpersonatedSigner(poolRewardDistributor.address, async (poolRewardDistributorSigner) => {
+        await lunchBox.connect(poolRewardDistributorSigner).notifyRewardAmount(amountToStake);
+      });
+      
+      // Transfer more ZOINKS
+      await zoinks.transfer(lunchBox.address, mockedResultOfSwap);
+      // Get reward
+      await mockSwaps(
+          "PancakeSwapRouter",
+          deployments,
+          0,
+          owner.address,
+          mockedResultOfSwap
+      );
+      await time.increase(10000);
+      
+      await withImpersonatedSigner(snacksPool.address, async (snacksPoolSigner) => {
+        await lunchBox.connect(snacksPoolSigner).getReward(owner.address);
+      }); 
+      
+      // Check stored amount
+      expect(await lunchBox.zoinksAmountStoredFor(owner.address)).to.equal(0);
+    });
+
+    it("Successful notifyRewardAmount() execution", async() => {
+        const reward = ethers.utils.parseEther("100");
+        // Reward rate expected
+        let rewardRate = reward.div(43200);
+        // Call from not the PRD contract
+        await expect(lunchBox.notifyRewardAmount(reward)).to.be.revertedWith("LunchBox: caller is not the PoolRewardDistributor contract");
+        // Reward notification
+        await busd.transfer(lunchBox.address, reward);
+        
+        await withImpersonatedSigner(poolRewardDistributor.address, async (poolRewardDistributorSigner) => {
+          await lunchBox.connect(poolRewardDistributorSigner).notifyRewardAmount(reward);
+        });
+        
+        // Reward rate check
+        expect(await lunchBox.rewardRate()).to.equal(rewardRate);
+        // Another reward notification
+        await busd.transfer(lunchBox.address, reward);
+        
+        await withImpersonatedSigner(poolRewardDistributor.address, async (poolRewardDistributorSigner) => {
+          await lunchBox.connect(poolRewardDistributorSigner).notifyRewardAmount(reward);
+        });
+        
+        // Reward rate check
+        rewardRate = ethers.BigNumber.from("4629522462277091");
+        expect(await lunchBox.rewardRate()).to.equal(rewardRate);
+        await time.increase(43200);
+        // Reward notification after period finished
+        await busd.transfer(lunchBox.address, reward);
+        
+        await withImpersonatedSigner(poolRewardDistributor.address, async (poolRewardDistributorSigner) => {
+          await lunchBox.connect(poolRewardDistributorSigner).notifyRewardAmount(reward);
+        });
+        
+        rewardRate = reward.div(43200);
+        // Reward rate check
+        expect(await lunchBox.rewardRate()).to.equal(rewardRate);
+
+        // Staking token clearing
+        await withImpersonatedSigner(lunchBox.address, async (lunchBoxSigner) => {
+          await busd.connect(lunchBoxSigner).transfer(owner.address, await busd.balanceOf(lunchBox.address));
+        });
+
+        await withImpersonatedSigner(poolRewardDistributor.address, async (poolRewardDistributorSigner) => {
+          await expect(lunchBox.connect(poolRewardDistributorSigner).notifyRewardAmount(reward))
+            .to.be.revertedWith("LunchBox: provided reward too high");
+        });
+    });
+
+    it("Successful setRewardsDuration() execution", async() => {
+        const reward = ethers.utils.parseEther("100");
+        // Reward notification
+        await busd.transfer(lunchBox.address, reward);
+
+        await withImpersonatedSigner(poolRewardDistributor.address, async (poolRewardDistributorSigner) => {
+          await lunchBox.connect(poolRewardDistributorSigner).notifyRewardAmount(reward);
+          // Call from not the owner
+          await expect(lunchBox.connect(poolRewardDistributorSigner).setRewardsDuration(0))
+            .to.be.revertedWith("Ownable: caller is not the owner");
+        });
+
+        // Too early rewards duration change
+        await expect(lunchBox.setRewardsDuration(0)).to.be.revertedWith("LunchBox: duration cannot be changed now");
+        await time.increase(43200);
+        // Successful change
+        await expect(lunchBox.setRewardsDuration(1))
+            .to.emit(lunchBox, "RewardsDurationUpdated")
+            .withArgs(1);
+    });
+
+    it("Successful setRecipients() execution", async() => {
+        let recipients = [owner.address, poolRewardDistributor.address];
+        let percentages = [5000, 4000, 1000];
+        
+        await withImpersonatedSigner(snacksPool.address, async (snacksPoolSigner) => {
+          // Call from not the owner
+          await expect(lunchBox.connect(snacksPoolSigner).setRecipients(recipients, percentages))
+            .to.be.revertedWith("Ownable: caller is not the owner");
+        });
+        
+        // Invalid array lengths
+        await expect(lunchBox.setRecipients(recipients, percentages))
+            .to.be.revertedWith("LunchBox: invalid array lengths");
+        percentages = [3000, 2000];
+        // Invalid sum of percentages
+        await expect(lunchBox.setRecipients(recipients, percentages))
+            .to.be.revertedWith("LunchBox: invalid sum of percentages");
+        percentages = [5000, 5000];
+        // Successful call
+        await lunchBox.setRecipients(recipients, percentages);
+    });
+
+    it("Successful onlySnacks check", async() => {
+        await expect(lunchBox.updateTotalSupplyFactor(100)).to.be.revertedWith("LunchBox: caller is not the Snacks contract");
     });
 });

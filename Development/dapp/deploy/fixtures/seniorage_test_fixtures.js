@@ -1,38 +1,29 @@
 const hre = require('hardhat');
-module.exports = async ({
-  getNamedAccounts,
-  deployments,
-  getChainId,
-  getUnnamedAccounts,
-}) => {
-  const {deploy, save, execute} = deployments;
-  const {
-    deployer,
-    firstRewardReceiver,
-    secondRewardReceiver
-  } = await getNamedAccounts();
+module.exports = async ({ getNamedAccounts, deployments }) => {
+  const { execute } = deployments;
+  const { deployer } = await getNamedAccounts();
   const [
-      owner,
-      bdmWallet,
-      crmWallet,
-      devManagerWallet,
-      marketingManagerWallet,
-      devWallet,
-      marketingFundWallet,
-      reservesWallet,
-      situationalFundWallet,
-      seniorageWallet
+    , // dont remove, owner is important order
+    bdmWallet,
+    crmWallet,
+    devManagerWallet,
+    marketingManagerWallet,
+    devWallet,
+    marketingFundWallet,
+    situationalFundWallet,
+    seniorageWallet, 
+    multisigWallet
   ] = await ethers.getSigners();
 
   const {
     ZERO,
     mockedResultOfSwap,
-    mockSwaps,
+    mockSwaps
   } = require('../helpers');
 
   await execute(
-    'Seniorage',
-    {from: deployer, log: true},
+    hre.names.internal.seniorage,
+    { from: deployer, log: true },
     'configureWallets',
     bdmWallet.address,
     crmWallet.address,
@@ -41,51 +32,51 @@ module.exports = async ({
     devWallet.address,
     marketingFundWallet.address,
     situationalFundWallet.address,
-    seniorageWallet.address
+    seniorageWallet.address,
+    multisigWallet.address
   );
 
   await execute(
-    'Seniorage',
-    {from: deployer, log: true},
+    hre.names.internal.seniorage,
+    { from: deployer, log: true },
     'configureCurrencies',
-    (await deployments.get("PancakePairLP")).address,
-    (await deployments.get('Zoinks')).address,
-    (await deployments.get('BTC')).address,
-    (await deployments.get('ETH')).address,
-    (await deployments.get("Snacks")).address,
-    (await deployments.get("BtcSnacks")).address,
-    (await deployments.get("EthSnacks")).address
+    (await deployments.get(hre.names.external.pairs.pancake.lp)).address,
+    (await deployments.get(hre.names.internal.zoinks)).address,
+    (await deployments.get(hre.names.external.tokens.btc)).address,
+    (await deployments.get(hre.names.external.tokens.eth)).address,
+    (await deployments.get(hre.names.internal.snacks)).address,
+    (await deployments.get(hre.names.internal.btcSnacks)).address,
+    (await deployments.get(hre.names.internal.ethSnacks)).address
   );
 
   await execute(
-    'Seniorage',
-    {from: deployer, log: true},
+    hre.names.internal.seniorage,
+    { from: deployer, log: true },
     'setPulse',
-    (await deployments.get("Pulse")).address
+    (await deployments.get(hre.names.internal.pulse)).address
   );
 
   await execute(
-    'Seniorage',
-    {from: deployer, log: true},
+    hre.names.internal.seniorage,
+    { from: deployer, log: true },
     'setAuthority',
     deployer
   );
 
   await execute(
-    'Seniorage',
-    {from: deployer, log: true},
+    hre.names.internal.seniorage,
+    { from: deployer, log: true },
     'setLunchBox',
-    (await deployments.get("LunchBox")).address
+    (await deployments.get(hre.names.internal.lunchBox)).address
   );
 
   await mockSwaps(
-    'PancakeSwapRouter',
+    hre.names.external.routers.pancake,
     deployments,
     ZERO,
     deployer,
     mockedResultOfSwap,
   );
-
 }
 module.exports.tags = ["seniorage_test_fixtures"];
 module.exports.dependencies = ["debug"];

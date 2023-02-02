@@ -1,5 +1,6 @@
 const { expect } = require("chai");
-const { ethers, deployments } = require("hardhat");
+const hre = require("hardhat");
+const { ethers, deployments } = hre;
 const { time } = require("@nomicfoundation/hardhat-network-helpers");
 const {
   ZERO,
@@ -9,7 +10,7 @@ const {
   mintNativeTokens
 } = require('../deploy/helpers');
 
-describe("AveragePriceOracle", () => {
+describe('AveragePriceOracle', () => {
 
   let zoinks;
   let averagePriceOracle;
@@ -36,34 +37,42 @@ describe("AveragePriceOracle", () => {
     await deployments.fixture(['average_price_oracle_test_fixtures']);
     [owner, alice] = await ethers.getSigners();
     zoinks = await ethers.getContractAt(
-      'Zoinks',
-      (await deployments.get('Zoinks')).address
+      hre.names.internal.zoinks,
+      (await deployments.get(hre.names.internal.zoinks)).address
     );
     averagePriceOracle = await ethers.getContractAt(
-      'AveragePriceOracle',
-      (await deployments.get('AveragePriceOracle')).address
+      hre.names.internal.averagePriceOracle,
+      (await deployments.get(hre.names.internal.averagePriceOracle)).address
     );
     pancakeZoinksBusdPairMockContract = await hre.ethers.getContractAt(
-      "MockContract",
-      (await deployments.get('PancakeSwapZoinksBusdPair')).address
+      hre.names.internal.mockContract,
+      (await deployments.get(hre.names.external.pairs.pancake.pair)).address
     );
     apeZoinksBusdPairMockContract = await hre.ethers.getContractAt(
-      "MockContract",
-      (await deployments.get('ApeSwapZoinksBusdPair')).address
+      hre.names.internal.mockContract,
+      (await deployments.get(hre.names.external.pairs.ape.pair)).address
     );
     biZoinksBusdPairMockContract = await hre.ethers.getContractAt(
-      "MockContract",
-      (await deployments.get('BiSwapZoinksBusdPair')).address
+      hre.names.internal.mockContract,
+      (await deployments.get(hre.names.external.pairs.bi.pair)).address
     );
     pancakeZoinksBusdPair = await hre.ethers.getContractAt(
-      "IPair",
-      (await deployments.get('PancakeSwapZoinksBusdPair')).address
+      hre.names.internal.iPair,
+      (await deployments.get(hre.names.external.pairs.pancake.pair)).address
     );
     getReservesSelector = pancakeZoinksBusdPair
       .interface.encodeFunctionData("getReserves");
-    apeSwapZoinksBusdPair = (await deployments.get("ApeSwapZoinksBusdPair")).address;
-    biSwapZoinksBusdPair = (await deployments.get("BiSwapZoinksBusdPair")).address;
-    pancakeSwapZoinksBusdPair = (await deployments.get("PancakeSwapZoinksBusdPair")).address;
+    apeSwapZoinksBusdPair = (await deployments.get(hre.names.external.pairs.ape.pair)).address;
+    biSwapZoinksBusdPair = (await deployments.get(hre.names.external.pairs.bi.pair)).address;
+    pancakeSwapZoinksBusdPair = (await deployments.get(hre.names.external.pairs.pancake.pair)).address;
+    router = await ethers.getContractAt(
+      hre.names.internal.iRouter,
+      (await deployments.get(hre.names.external.routers.pancake)).address
+    );
+    busd = await ethers.getContractAt(
+      hre.names.internal.mockToken,
+      (await deployments.get(hre.names.external.tokens.busd)).address
+    );
   });
 
   it('Should perform initialize properly', async () => {
@@ -97,10 +106,17 @@ describe("AveragePriceOracle", () => {
       apeSwapZoinksBusdPair,
       biSwapZoinksBusdPair,
       pancakeSwapZoinksBusdPair
-    )).to.be.revertedWith("AveragePriceOracle: already initialized");
+    )).to.be.revertedWith("Initializable: contract is already initialized");
   });
 
   it("Successful update() execution", async () => {
+    // Not initialized execution
+    await withImpersonatedSigner(zoinks.address, async (impersonatedZoinksSigner) => {
+      await mintNativeTokens(impersonatedZoinksSigner, etherToMintForImpersonatedSigners);
+      await expect(
+        averagePriceOracle.connect(impersonatedZoinksSigner).update()
+      ).to.be.revertedWith("AveragePriceOracle: caller is not the Zoinks contract");
+    });
     await averagePriceOracle.initialize(
       zoinks.address,
       apeSwapZoinksBusdPair,
@@ -127,25 +143,15 @@ describe("AveragePriceOracle", () => {
     // 100k
     let amountToSwap = ethers.utils.parseEther("100000");
     let amountOutMin = ethers.utils.parseEther("90000");
+    await busd.approve(router.address, amountToSwap.mul(10));
     // Swap
     block = await ethers.provider.getBlock();
-    await zoinks.swapOnZoinks(
+    await router.swapExactTokensForTokens(
       amountToSwap,
       amountOutMin,
-      block.timestamp + 100,
-      2
-    );
-    await zoinks.swapOnZoinks(
-      amountToSwap,
-      amountOutMin,
-      block.timestamp + 100,
-      2
-    );
-    await zoinks.swapOnZoinks(
-      amountToSwap,
-      amountOutMin,
-      block.timestamp + 100,
-      2
+      [busd.address, zoinks.address],
+      owner.address,
+      block.timestamp + 100
     );
     await time.increase(43200);
     await withImpersonatedSigner(zoinks.address, async (impersonatedZoinksSigner) => {
@@ -169,23 +175,12 @@ describe("AveragePriceOracle", () => {
     amountOutMin = ethers.utils.parseEther("70000");
     // Swap
     block = await ethers.provider.getBlock();
-    await zoinks.swapOnZoinks(
+    await router.swapExactTokensForTokens(
       amountToSwap,
       amountOutMin,
-      block.timestamp + 100,
-      2
-    );
-    await zoinks.swapOnZoinks(
-      amountToSwap,
-      amountOutMin,
-      block.timestamp + 100,
-      2
-    );
-    await zoinks.swapOnZoinks(
-      amountToSwap,
-      amountOutMin,
-      block.timestamp + 100,
-      2
+      [busd.address, zoinks.address],
+      owner.address,
+      block.timestamp + 100
     );
     await time.increase(21600);
 
@@ -205,5 +200,11 @@ describe("AveragePriceOracle", () => {
       .div(TWAP_PERCENT)
       .div(RESOLUTION);
     expect(twapFromContract).to.be.equal(twap);
+    await withImpersonatedSigner(zoinks.address, async (impersonatedZoinksSigner) => {
+      await mintNativeTokens(impersonatedZoinksSigner, etherToMintForImpersonatedSigners);
+      await expect(
+        averagePriceOracle.connect(impersonatedZoinksSigner).update()
+      ).to.be.revertedWith("AveragePriceOracle: period not elapsed");
+    });
   });
 });

@@ -10,7 +10,7 @@ module.exports = async ({
     deployer
   } = await getNamedAccounts();
   await execute(
-    'SnacksPool',
+    hre.names.internal.snacksPool,
     {from: deployer, log: true},
     'setPoolRewardDistributor',
     deployer

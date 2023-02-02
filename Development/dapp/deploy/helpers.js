@@ -19,32 +19,40 @@ const skipDeploymentIfAlreadyDeployed = false;
 ////////////////////////////////////////////
 
 const getMockToken = async (name, symbol, amount, deploy, deployer, skipDeploymentIfAlreadyDeployed, save) => {
-  let mockTokenDeployment = await deploy("MockToken", {
+  let mockTokenDeployment = await deploy(hre.names.internal.mockToken, {
     from: deployer,
     args: [name, symbol, amount],
     log: true
   });
   await save(name, mockTokenDeployment);
-  return await hre.ethers.getContractAt("MockToken", mockTokenDeployment.address);
+  return await hre.ethers.getContractAt(hre.names.internal.mockToken, mockTokenDeployment.address);
 }
 
 const getMock = async (interface, artifactName, deploy, deployer, skipDeploymentIfAlreadyDeployed, save, prepareMocks) => {
-  let mock = await deploy("MockContract", {
+  let mock = await deploy(hre.names.internal.mockContract, {
     from: deployer,
     log: true
   });
   await save(artifactName, mock);
   const result = await hre.ethers.getContractAt(interface, mock.address);
-  mock = await hre.ethers.getContractAt("MockContract", mock.address);
+  mock = await hre.ethers.getContractAt(hre.names.internal.mockContract, mock.address);
   if (prepareMocks) {
     await prepareMocks(mock, result);
   }
   return result;
 }
 
+const faucetBusdFromWhale = async (who, amount, busd) => {
+  const impersonatedBusdWhale = '0xF977814e90dA44bFA03b6295A0616a897441aceC';
+  await withImpersonatedSigner(impersonatedBusdWhale, async (signer) => {
+    await mintNativeTokens(signer.address, '0x10000000000000000000');
+    await busd.connect(signer).transfer(who, amount);
+  });
+}
+
 const mintNativeTokens = async (signer, amountHex) => {
   await hre.network.provider.send("hardhat_setBalance", [
-    signer.address,
+    signer.address || signer,
     amountHex
   ]);
 }
@@ -78,11 +86,11 @@ const mockSwaps = async (
   const block = await hre.ethers.provider.getBlock();
 
   const router = await hre.ethers.getContractAt(
-    "IRouter",
+    hre.names.internal.iRouter,
     (await deployments.get(routerArtifactName)).address
   );
   const routerMockContract = await hre.ethers.getContractAt(
-    "MockContract",
+    hre.names.internal.mockContract,
     (await deployments.get(routerArtifactName)).address
   );
 
@@ -92,8 +100,8 @@ const mockSwaps = async (
         amount,
         ZERO,
         [
-          (await deployments.get('BUSD')).address,
-          (await deployments.get('Zoinks')).address
+          (await deployments.get(hre.names.external.tokens.busd)).address,
+          (await deployments.get(hre.names.internal.zoinks)).address
         ],
         deployer,
         hre.ethers.BigNumber.from((block.timestamp + 15).toString())
@@ -114,21 +122,21 @@ const mockPrice1Cumulative = async (
   deployments
 ) => {
   const pancakeZoinksBusdPairMockContract = await hre.ethers.getContractAt(
-    "MockContract",
-    (await deployments.get('PancakeSwapZoinksBusdPair')).address
+    hre.names.internal.mockContract,
+    (await deployments.get(hre.names.external.pairs.pancake.pair)).address
   );
   const apeZoinksBusdPairMockContract = await hre.ethers.getContractAt(
-    "MockContract",
-    (await deployments.get('ApeSwapZoinksBusdPair')).address
+    hre.names.internal.mockContract,
+    (await deployments.get(hre.names.external.pairs.ape.pair)).address
   );
   const biZoinksBusdPairMockContract = await hre.ethers.getContractAt(
-    "MockContract",
-    (await deployments.get('BiSwapZoinksBusdPair')).address
+    hre.names.internal.mockContract,
+    (await deployments.get(hre.names.external.pairs.bi.pair)).address
   );
 
   const pancakeZoinksBusdPair = await hre.ethers.getContractAt(
-    "IPair",
-    (await deployments.get('PancakeSwapZoinksBusdPair')).address
+    hre.names.internal.iPair,
+    (await deployments.get(hre.names.external.pairs.pancake.pair)).address
   );
   const price1CumulativeLastSelector = pancakeZoinksBusdPair
     .interface.encodeFunctionData("price1CumulativeLast");
@@ -164,23 +172,23 @@ const mockReserves = async (
   const currentTime = await time.latest();
 
   const pancakeZoinksBusdPair = await hre.ethers.getContractAt(
-    "IPair",
-    (await deployments.get('PancakeSwapZoinksBusdPair')).address
+    hre.names.internal.iPair,
+    (await deployments.get(hre.names.external.pairs.pancake.pair)).address
   );
   const getReservesSelector = pancakeZoinksBusdPair
     .interface.encodeFunctionData("getReserves");
 
   const pancakeZoinksBusdPairMockContract = await hre.ethers.getContractAt(
-    "MockContract",
-    (await deployments.get('PancakeSwapZoinksBusdPair')).address
+    hre.names.internal.mockContract,
+    (await deployments.get(hre.names.external.pairs.pancake.pair)).address
   );
   const apeZoinksBusdPairMockContract = await hre.ethers.getContractAt(
-    "MockContract",
-    (await deployments.get('ApeSwapZoinksBusdPair')).address
+    hre.names.internal.mockContract,
+    (await deployments.get(hre.names.external.pairs.ape.pair)).address
   );
   const biZoinksBusdPairMockContract = await hre.ethers.getContractAt(
-    "MockContract",
-    (await deployments.get('BiSwapZoinksBusdPair')).address
+    hre.names.internal.mockContract,
+    (await deployments.get(hre.names.external.pairs.bi.pair)).address
   );
 
   await apeZoinksBusdPairMockContract.givenMethodReturn(
@@ -211,12 +219,12 @@ const mockLiquidity = async (
   deployments
 ) => {
   const pancakeRouter = await hre.ethers.getContractAt(
-    "IRouter",
-    (await deployments.get('PancakeSwapRouter')).address
+    hre.names.internal.iRouter,
+    (await deployments.get(hre.names.external.routers.pancake)).address
   );
   const pancakeRouterMockContract = await hre.ethers.getContractAt(
-    "MockContract",
-    (await deployments.get('PancakeSwapRouter')).address
+    hre.names.internal.mockContract,
+    (await deployments.get(hre.names.external.routers.pancake)).address
   );
   const addLiquiditySelector = pancakeRouter.interface.encodeFunctionData(
       "addLiquidity",
@@ -244,8 +252,8 @@ const mockGetPair = async (
   deployments
 ) => {
   const pancakeFactory = await hre.ethers.getContractAt(
-    "IFactory",
-    (await deployments.get('PancakeSwapFactory')).address
+    hre.names.internal.iFactory,
+    (await deployments.get(hre.names.external.factories.pancake)).address
   );
   const getPairSelector = pancakeFactory.interface.encodeFunctionData(
       "getPair",
@@ -255,29 +263,29 @@ const mockGetPair = async (
       ]
     );
   const pancakeFactoryMockContract = await hre.ethers.getContractAt(
-    "MockContract",
-    (await deployments.get('PancakeSwapFactory')).address
+    hre.names.internal.mockContract,
+    (await deployments.get(hre.names.external.factories.pancake)).address
   );
   const apeFactoryMockContract = await hre.ethers.getContractAt(
-    "MockContract",
-    (await deployments.get('ApeSwapFactory')).address
+    hre.names.internal.mockContract,
+    (await deployments.get(hre.names.external.factories.ape)).address
   );
   const biFactoryMockContract = await hre.ethers.getContractAt(
-    "MockContract",
-    (await deployments.get('BiSwapFactory')).address
+    hre.names.internal.mockContract,
+    (await deployments.get(hre.names.external.factories.bi)).address
   );
 
   const pancakeZoinksBusdPairMockContract = await hre.ethers.getContractAt(
-    "MockContract",
-    (await deployments.get('PancakeSwapZoinksBusdPair')).address
+    hre.names.internal.mockContract,
+    (await deployments.get(hre.names.external.pairs.pancake.pair)).address
   );
   const apeZoinksBusdPairMockContract = await hre.ethers.getContractAt(
-    "MockContract",
-    (await deployments.get('ApeSwapZoinksBusdPair')).address
+    hre.names.internal.mockContract,
+    (await deployments.get(hre.names.external.pairs.ape.pair)).address
   );
   const biZoinksBusdPairMockContract = await hre.ethers.getContractAt(
-    "MockContract",
-    (await deployments.get('BiSwapZoinksBusdPair')).address
+    hre.names.internal.mockContract,
+    (await deployments.get(hre.names.external.pairs.bi.pair)).address
   );
 
   await pancakeFactoryMockContract.givenMethodReturn(
@@ -303,53 +311,76 @@ const mockGetPair = async (
   );
 }
 
-const mintZoinksAndAllSnacks = async (deployments, owner, amountToMint, receiver) => {
+const mintZoinks = async (deployments, owner, amountToMint, receiver) => {
   const busd = await hre.ethers.getContractAt(
-    "MockToken",
-    (await deployments.get('BUSD')).address
-  );
-  const eth = await hre.ethers.getContractAt(
-    "MockToken",
-    (await deployments.get('ETH')).address
-  );
-  const btc = await hre.ethers.getContractAt(
-    "MockToken",
-    (await deployments.get('BTC')).address
+    hre.names.internal.mockToken,
+    (await deployments.get(hre.names.external.tokens.busd)).address
   );
   const zoinks = await hre.ethers.getContractAt(
-    "Zoinks",
-    (await deployments.get('Zoinks')).address
+    hre.names.internal.zoinks,
+    (await deployments.get(hre.names.internal.zoinks)).address
+  );
+  await busd.mint(owner.address, amountToMint);
+  await busd.approve(zoinks.address, amountToMint);
+  await zoinks.mint(amountToMint);
+  if (receiver) {
+    await zoinks.transfer(receiver.address, amountToMint);
+  }
+};
+
+const mintZoinksAndAllSnacks = async (deployments, owner, amountToMintWithoutFee, receiver) => {
+  const busd = await hre.ethers.getContractAt(
+    hre.names.internal.mockToken,
+    (await deployments.get(hre.names.external.tokens.busd)).address
+  );
+  const eth = await hre.ethers.getContractAt(
+    hre.names.internal.mockToken,
+    (await deployments.get(hre.names.external.tokens.eth)).address
+  );
+  const btc = await hre.ethers.getContractAt(
+    hre.names.internal.mockToken,
+    (await deployments.get(hre.names.external.tokens.btc)).address
+  );
+  const zoinks = await hre.ethers.getContractAt(
+    hre.names.internal.zoinks,
+    (await deployments.get(hre.names.internal.zoinks)).address
   );
   const snacks = await hre.ethers.getContractAt(
-    "Snacks",
-    (await deployments.get('Snacks')).address
+    hre.names.internal.snacks,
+    (await deployments.get(hre.names.internal.snacks)).address
   );
   const btcSnacks = await hre.ethers.getContractAt(
-    "BtcSnacks",
-    (await deployments.get('BtcSnacks')).address
+    hre.names.internal.btcSnacks,
+    (await deployments.get(hre.names.internal.btcSnacks)).address
   );
   const ethSnacks = await hre.ethers.getContractAt(
-    "EthSnacks",
-    (await deployments.get('EthSnacks')).address
+    hre.names.internal.ethSnacks,
+    (await deployments.get(hre.names.internal.ethSnacks)).address
   );
 
-  await busd.mint(owner.address, amountToMint);
-  await busd.approve(zoinks.address, amountToMint);
-  await zoinks.mint(amountToMint);
+  await busd.mint(owner.address, amountToMintWithoutFee);
+  await busd.approve(zoinks.address, amountToMintWithoutFee);
+  await zoinks.mint(amountToMintWithoutFee);
 
-  await busd.mint(owner.address, amountToMint);
-  await busd.approve(zoinks.address, amountToMint);
-  await zoinks.mint(amountToMint);
-  await zoinks.approve(snacks.address, amountToMint);
-  await snacks.mintWithPayTokenAmount(amountToMint);
+  const FEE_PERCENT = hre.ethers.BigNumber.from('500');
+  const BASE_PERCENT = hre.ethers.BigNumber.from('10000');
 
-  await eth.mint(owner.address, amountToMint);
-  await eth.approve(ethSnacks.address, amountToMint);
-  await ethSnacks.mintWithPayTokenAmount(amountToMint);
+  const amountToMint = amountToMintWithoutFee;
+  const feeAmount = amountToMintWithoutFee.mul(FEE_PERCENT).div(BASE_PERCENT);
 
-  await btc.mint(owner.address, amountToMint);
-  await btc.approve(btcSnacks.address, amountToMint);
-  await btcSnacks.mintWithPayTokenAmount(amountToMint);
+  await busd.mint(owner.address, amountToMint.add(feeAmount));
+  await busd.approve(zoinks.address, amountToMint.add(feeAmount));
+  await zoinks.mint(amountToMint.add(feeAmount));
+  await zoinks.approve(snacks.address, amountToMint.add(feeAmount));
+  await snacks.mintWithPayTokenAmount(amountToMint.add(feeAmount));
+
+  await eth.mint(owner.address, amountToMint.add(feeAmount));
+  await eth.approve(ethSnacks.address, amountToMint.add(feeAmount));
+  await ethSnacks.mintWithPayTokenAmount(amountToMint.add(feeAmount));
+
+  await btc.mint(owner.address, amountToMint.add(feeAmount));
+  await btc.approve(btcSnacks.address, amountToMint.add(feeAmount));
+  await btcSnacks.mintWithPayTokenAmount(amountToMint.add(feeAmount));
 
   if (receiver) {
     await zoinks.transfer(receiver.address, amountToMint);
@@ -358,6 +389,129 @@ const mintZoinksAndAllSnacks = async (deployments, owner, amountToMint, receiver
     await btcSnacks.transfer(receiver.address, amountToMint);
   }
 };
+
+const getLastBlockTimestamp = async (hre, network) => {
+  if (network.name === 'hardhat') {
+    return await time.latest();
+  }
+  const provider = new hre.ethers.providers.JsonRpcProvider(hre.config.networks[network.name].url);
+  return (await provider.getBlock(await provider.getBlockNumber())).timestamp;
+};
+
+const getNamedAccountsFromTenderly = async (hre, log) => {
+  const provider = new hre.ethers.providers.JsonRpcProvider(hre.config.networks.tenderly.url);
+  const accounts = await provider.listAccounts();
+  const defaultAccount = accounts[0];
+  const result = {};
+  for (const [key, value] of Object.entries(hre.config.namedAccounts)) {
+    if (accounts[value]) {
+      result[key] = accounts[value];
+    } else {
+      result[key] = defaultAccount;
+      log(`WARNING: the value for '${key}' was not found in Tenderly provider under index '${value}', replacing by the default account!`);
+    }
+  }
+  return result;
+};
+
+const emptyStage = (message) => 
+  async ({deployments}) => {
+      const {log} = deployments;
+      log(message);
+  };
+
+const backendCall1224 = async (hre) => {
+  let authority;
+
+  let zoinks;
+  let snacks;
+  let btcSnacks;
+  let ethSnacks;
+  let seniorage;
+  let pulse;
+  let poolRewardDistributor;
+
+  authority = (await hre.ethers.getSigners())[1];
+
+  zoinks = await hre.ethers.getContractAt(
+    hre.names.internal.zoinks,
+    (await hre.deployments.get(hre.names.internal.zoinks)).address
+  );
+  snacks = await hre.ethers.getContractAt(
+    hre.names.internal.snacks,
+    (await hre.deployments.get(hre.names.internal.snacks)).address
+  );
+  btcSnacks = await hre.ethers.getContractAt(
+    hre.names.internal.btcSnacks,
+    (await hre.deployments.get(hre.names.internal.btcSnacks)).address
+  );
+  ethSnacks = await hre.ethers.getContractAt(
+    hre.names.internal.ethSnacks,
+    (await hre.deployments.get(hre.names.internal.ethSnacks)).address
+  );
+  seniorage = await hre.ethers.getContractAt(
+    hre.names.internal.seniorage,
+    (await hre.deployments.get(hre.names.internal.seniorage)).address
+  );
+  pulse = await hre.ethers.getContractAt(
+    hre.names.internal.pulse,
+    (await hre.deployments.get(hre.names.internal.pulse)).address
+  );
+  poolRewardDistributor = await hre.ethers.getContractAt(
+    hre.names.internal.poolRewardDistributor,
+    (await hre.deployments.get(hre.names.internal.poolRewardDistributor)).address
+  );
+  snacksPool = await hre.ethers.getContractAt(
+    hre.names.internal.snacksPool,
+    (await hre.deployments.get(hre.names.internal.snacksPool)).address
+  );
+
+  // ACT
+  // 1. Zoinks - applyTWAP
+  await zoinks.connect(authority).applyTWAP();
+  // 2. BtcSnacks - distributeFee
+  await btcSnacks.connect(authority).distributeFee();
+  // 3. EthSnacks - distributeFee
+  await ethSnacks.connect(authority).distributeFee();
+  // 4. Snacks - distributeFee
+  await snacks.connect(authority).distributeFee();
+  // 5. Pulse - distributeBtcSnacksAndEthSnacks
+  await pulse.connect(authority).distributeBtcSnacksAndEthSnacks();
+  // 6. Seniorage - distributeNonBusdCurrencies
+  await seniorage.connect(authority).distributeNonBusdCurrencies(0, 0, 0);
+  // 7. Seniorage - distributeBusd
+  await seniorage.connect(authority).distributeBusd(0, 0, 0, 0, 0);
+  // 8. Pulse - harvest
+  await pulse.connect(authority).harvest();
+  // 9. Pulse - distributeSnacks
+  await pulse.connect(authority).distributeSnacks();
+  // 10. Pulse - distributeZoinks
+  await pulse.connect(authority).distributeZoinks();
+  // 11. PoolRewardDistributor - distributeRewards
+  await poolRewardDistributor.connect(authority).distributeRewards();
+  // 12. SnacksPool - deliverRewardsForAllLunchBoxParticipants
+  let user;
+  let totalRewardAmountForParticipantsInSnacks = ZERO;
+  let totalRewardAmountForParticipantsInBtcSnacks = ZERO;
+  let totalRewardAmountForParticipantsInEthSnacks = ZERO;
+  for (let i = 0; i < await snacksPool.getLunchBoxParticipantsLength(); i++) {
+    user = await snacksPool.getLunchBoxParticipantAt(i);
+    totalRewardAmountForParticipantsInSnacks 
+      = totalRewardAmountForParticipantsInSnacks.add(await snacksPool.earned(user, snacks.address));
+    totalRewardAmountForParticipantsInBtcSnacks 
+      = totalRewardAmountForParticipantsInBtcSnacks.add(await snacksPool.earned(user, btcSnacks.address));
+    totalRewardAmountForParticipantsInEthSnacks 
+      = totalRewardAmountForParticipantsInEthSnacks.add(await snacksPool.earned(user, ethSnacks.address));
+  }
+  await snacksPool.connect(authority).deliverRewardsForAllLunchBoxParticipants(
+    totalRewardAmountForParticipantsInSnacks,
+    totalRewardAmountForParticipantsInBtcSnacks,
+    totalRewardAmountForParticipantsInEthSnacks,
+    0,
+    0,
+    0
+  );
+}
 
 module.exports = {
   getMockToken,
@@ -377,5 +531,11 @@ module.exports = {
   mockReserves,
   mockLiquidity,
   mockGetPair,
-  mintZoinksAndAllSnacks
+  mintZoinksAndAllSnacks,
+  faucetBusdFromWhale,
+  mintZoinks,
+  getLastBlockTimestamp,
+  getNamedAccountsFromTenderly,
+  emptyStage,
+  backendCall1224
 };

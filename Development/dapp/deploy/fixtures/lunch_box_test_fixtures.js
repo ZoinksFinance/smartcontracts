@@ -21,7 +21,7 @@ module.exports = async ({
   const percents = [10000];
 
   await execute(
-    'LunchBox',
+    hre.names.internal.lunchBox,
     {from: deployer, log: true},
     'setRecipients',
     recipients,
@@ -29,7 +29,7 @@ module.exports = async ({
   );
 
   await mockSwaps(
-    'PancakeSwapRouter',
+    hre.names.external.routers.pancake,
     deployments,
     ZERO,
     deployer,

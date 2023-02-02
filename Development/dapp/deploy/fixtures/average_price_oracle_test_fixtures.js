@@ -26,12 +26,12 @@ module.exports = async ({
   } = await getNamedAccounts();
 
   const zoinks = await ethers.getContractAt(
-    'Zoinks',
-    (await deployments.get('Zoinks')).address
+    hre.names.internal.zoinks,
+    (await deployments.get(hre.names.internal.zoinks)).address
   );
   const busd = await ethers.getContractAt(
-    'MockToken',
-    (await deployments.get('BUSD')).address
+    hre.names.internal.mockToken,
+    (await deployments.get(hre.names.external.tokens.busd)).address
   );
 
   // Zoinks mint by owner
@@ -41,21 +41,21 @@ module.exports = async ({
 
   // mock swaps
   await mockSwaps(
-    'PancakeSwapRouter',
+    hre.names.external.routers.pancake,
     deployments,
     ZERO,
     deployer,
     mockedResultOfSwap,
   );
   await mockSwaps(
-    'ApeSwapRouter',
+    hre.names.external.routers.ape,
     deployments,
     ZERO,
     deployer,
     mockedResultOfSwap,
   );
   await mockSwaps(
-    'BiSwapRouter',
+    hre.names.external.routers.bi,
     deployments,
     ZERO,
     deployer,
