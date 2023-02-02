@@ -1,62 +1,66 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.15;
 
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@prb/math/contracts/PRBMathUD60x18.sol";
 
 import "./base/SnacksBase.sol";
 import "./interfaces/ISnacks.sol";
 
+/// @title Контракт ETHSNACKS токена.
 contract EthSnacks is SnacksBase {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
     using PRBMathUD60x18 for uint256;
     
-    uint256 private constant STEP = 0.00000001 * 1e18;
-    uint256 private constant CORRELATION_FACTOR = 1e26;
-    uint256 private constant TOTAL_SUPPLY_FACTOR = 1e8;
-    uint256 private constant PULSE_FEE_PERCENT = 1500;
-    uint256 private constant POOL_REWARD_DISTRIBUTOR_FEE_PERCENT = 3500;
-    uint256 private constant SENIORAGE_FEE_PERCENT = 1500;
-    uint256 private constant SNACKS_FEE_PERCENT = 1500;
+    uint256 constant private MULTIPLIER = 0.00000001 * 1e18;
+    uint256 constant private CORRELATION = 1e26;
+    uint256 constant private STEP = 1e8;
+    uint256 constant private BASE_PERCENT = 10000;
+    uint256 constant private PULSE_FEE_PERCENT = 1500;
+    uint256 constant private POOL_REWARD_DISTRIBUTOR_FEE_PERCENT = 3500;
+    uint256 constant private SENIORAGE_FEE_PERCENT = 1500;
+    uint256 constant private SNACKS_FEE_PERCENT = 1500;
 
     address public snacks;
 
-    constructor()
+    constructor(
+    )
         SnacksBase(
+            MULTIPLIER,
+            CORRELATION,
             STEP,
-            CORRELATION_FACTOR,
-            TOTAL_SUPPLY_FACTOR,
             PULSE_FEE_PERCENT,
             POOL_REWARD_DISTRIBUTOR_FEE_PERCENT,
             SENIORAGE_FEE_PERCENT,
-            "ethSnacks",
-            "ETSNACK"
+            "EthSnacks",
+            "ETHSNACKS"
         )
     {}
-
-    /** 
-    * @notice Configures the contract.
-    * @dev Could be called by the owner in case of resetting addresses.
-    * @param eth_ Binance-Peg Ethereum token address.
-    * @param pulse_ Pulse contract address.
-    * @param poolRewardDistributor_ PoolRewardDistributor contract address.
-    * @param seniorage_ Seniorage contract address.
-    * @param snacksPool_ SnacksPool contract address.
-    * @param pancakeSwapPool_ PancakeSwapPool contract address.
-    * @param lunchBox_ LunchBox contract address.
-    * @param authority_ Authorised address.
-    * @param snacks_ Snacks token address.
+    
+    /**
+    * @notice Функция, реализующая логику установки адресов или их переустановки
+    * в случае редеплоя контрактов.
+    * @dev Если редеплоится какой-то один контракт, то на место тех адресов,
+    * которые не редеплоились, передаются старые значения.
+    * @param eth_ Адрес ETH токена.
+    * @param pulse_ Адрес контракта Pulse.
+    * @param poolRewardDistributor_ Адрес контракта PoolRewardDistributor.
+    * @param seniorage_ Адрес контракта Seniorage.
+    * @param authority_ Адрес EOA, имеющего доступ к вызову функции {distributeFee}.
+    * @param snacks_ Адрес SNACKS токена.
+    * @param pancakeSwapPool_ Адрес контракта PancakeSwapPool.
+    * @param lunchBox_ Адрес контракта LunchBox.
     */
     function configure(
         address eth_,
         address pulse_,
         address poolRewardDistributor_,
         address seniorage_,
-        address snacksPool_,
-        address pancakeSwapPool_,
-        address lunchBox_,
         address authority_,
-        address snacks_
+        address snacks_,
+        address pancakeSwapPool_,
+        address lunchBox_
     )
         external
         onlyOwner
@@ -66,20 +70,16 @@ contract EthSnacks is SnacksBase {
             pulse_,
             poolRewardDistributor_,
             seniorage_,
-            snacksPool_,
-            pancakeSwapPool_,
-            lunchBox_,
             authority_
         );
         snacks = snacks_;
         _excludedHolders.add(snacks_);
+        _excludedHolders.add(pancakeSwapPool_);
+        _excludedHolders.add(lunchBox_);
     }
     
-    /** 
-    * @notice Hook that is called inside `distributeFee()` function.
-    * @dev Shouldn't be used without overriden logic.
-    * @param undistributedFee_ Amount of the undistributed fee.
-    */
+    /// @notice Hook that is called before fee distribution.
+    /// @param undistributedFee_ Amount of undistributed fee.
     function _beforeDistributeFee(
         uint256 undistributedFee_
     )

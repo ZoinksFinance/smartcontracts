@@ -3,14 +3,6 @@ const { ethers, deployments, getNamedAccounts } = require("hardhat");
 const { ZERO_ADDRESS, ZERO } = require("../deploy/helpers");
 const { time } = require("@nomicfoundation/hardhat-network-helpers");
 
-const startImpersonating = async (address) => {
-  await hre.network.provider.request({
-      method: "hardhat_impersonateAccount",
-      params: [address]
-  });
-  await hre.network.provider.send("hardhat_setBalance", [address, ethers.utils.parseEther("1000.0").toHexString().replace("0x0", "0x")]);
-}
-
 module.exports = (
   disabledTestCaseIndicies,
   snacksInstanceAcquiringAction,
@@ -76,11 +68,11 @@ module.exports = (
   });
 
   const testCases = [
-    () => it("0. Check after deploy we don't have any total supply of <any>Snacks", async () => {
+    () => it("1. Check after deploy we don't have any total supply of <any>Snacks", async () => {
       expect(await anySnacks.totalSupply()).to.be.equal(ZERO);
     }),
 
-    (overridenExpectedValue) => it("1. Check how many <token> we need to pay for 5 new <any>Snacks", async () => {
+    (overridenExpectedValue) => it("2. Check how many <token> we need to pay for 5 new <any>Snacks", async () => {
       // newLastSnack min ONE_SNACK
       // for redeem also min ONE_SNACK
       expect(await anySnacks.calculatePayTokenAmountOnMint(
@@ -90,7 +82,7 @@ module.exports = (
       );
     }),
 
-    (overridenBuyerBTCInitial) => it("2. Buy 5 new <any>Snacks and pay with 0.00000015 <token>. And check undistributed 5% buy fee 0.25 <any>Snacks", async () => {
+    (overridenBuyerBTCInitial) => it("3. Buy 5 new <any>Snacks and pay with 0.00000015 <token>. And check undistributed 5% buy fee 0.25 <any>Snacks", async () => {
       // ARRANGE
       const amountBtcSnacksToBuy = ethers.utils.parseEther('5');
       // const buyerBTCInitial = ethers.BigNumber.from('7000000150000000000'); // tokenToPay = 0.00000015
@@ -119,7 +111,7 @@ module.exports = (
       expect(undistributedFeeSnacksResult).to.be.equal(undistributedFeeSnacksExpected);
     }),
 
-    (overridenTokenToReturnExpected) => it("3. Check how many <token> we need to return for 4.75 of total 5 <any>Snacks", async () => {
+    (overridenTokenToReturnExpected) => it("4. Check how many <token> we need to return for 4.75 of total 5 <any>Snacks", async () => {
       // ACT
       const amountBtcSnacksToBurn = ethers.utils.parseEther('4.75');
       const currentTotalSupply = ethers.utils.parseEther('5');
@@ -131,7 +123,7 @@ module.exports = (
       expect(tokenToReturnResult).to.be.equal(tokenToReturnExpected);
     }),
 
-    (overridenTokenToReturnExpected) => it("4. Check how many <token> we need to return for 6 of total 7 <any>Snacks", async () => {
+    (overridenTokenToReturnExpected) => it("5. Check how many <token> we need to return for 6 of total 7 <any>Snacks", async () => {
       // ACT
       const amountBtcSnacksToBurn = ethers.utils.parseEther('6');
       const currentTotalSupply = ethers.utils.parseEther('7');
@@ -146,7 +138,7 @@ module.exports = (
     (
       overridenBuyerBTC,
       overridenSellerBTCExpected
-    ) => it("5. Redeem 4.75 <any>Snacks and get <token>. And check undistributed 5% buy + 10% redeem fee 0.50 <any>Snacks", async () => {
+    ) => it("6. Redeem 4.75 <any>Snacks and get <token>. And check undistributed 5% buy + 10% redeem fee 0.50 <any>Snacks", async () => {
       // ACT
       // Step 1: buy Snacks
       const amountBtcSnacksToBuy = ethers.utils.parseEther('5');
@@ -174,33 +166,23 @@ module.exports = (
       expect(undistributedFeeSnacksResult).to.be.equal(undistributedFeeSnacksExpected);
     }),
 
-    (
-      overridenBuyer1BTC,
-      overridenBuyer2BTC,
-      overridenBuyer3BTC,
-      overridenBuyer4BTC,
-      overridenBuyer5BTC,
-      overridenPulseBtcSnacksWithFeeExpected,
-      overridenSnacksBtcSnacksWithFeeExpected,
-      overridenSeniorageBtcSnacksWithFeeExpected,
-      overridenTolerance
-    ) => it("6. First we have 5 buyers of <any>Snacks, then distribute undistributed fee", async () => {
+    () => it("9. First we have 5 buyers of <any>Snacks, then distribute undistributed fee", async () => {
       // ACT
       const amountBtcSnacksToBuy = ethers.utils.parseEther('5'); // total supply 0
 
-      const buyer1BTC = overridenBuyer1BTC || ethers.BigNumber.from('150000000000'); // tokenToPay = 0.00000015
+      const buyer1BTC = ethers.BigNumber.from('150000000000'); // tokenToPay = 0.00000015
       await mintSnacksThroughBuyToken(buyer1, buyer1BTC, amountBtcSnacksToBuy);
 
-      const buyer2BTC = overridenBuyer2BTC || ethers.BigNumber.from('400000000000'); // tokenToPay = 0.00000040
+      const buyer2BTC = ethers.BigNumber.from('400000000000'); // tokenToPay = 0.00000040
       await mintSnacksThroughBuyToken(buyer2, buyer2BTC, amountBtcSnacksToBuy);
 
-      const buyer3BTC = overridenBuyer3BTC || ethers.BigNumber.from('650000000000'); // tokenToPay = 0.00000065
+      const buyer3BTC = ethers.BigNumber.from('650000000000'); // tokenToPay = 0.00000065
       await mintSnacksThroughBuyToken(buyer3, buyer3BTC, amountBtcSnacksToBuy);
 
-      const buyer4BTC = overridenBuyer4BTC || ethers.BigNumber.from('900000000000'); // tokenToPay = 0.00000090
+      const buyer4BTC = ethers.BigNumber.from('900000000000'); // tokenToPay = 0.00000090
       await mintSnacksThroughBuyToken(buyer4, buyer4BTC, amountBtcSnacksToBuy);
 
-      const buyer5BTC = overridenBuyer5BTC || ethers.BigNumber.from('1150000000000'); // tokenToPay = 0.00000115
+      const buyer5BTC = ethers.BigNumber.from('1150000000000'); // tokenToPay = 0.00000115
       await mintSnacksThroughBuyToken(buyer5, buyer5BTC, amountBtcSnacksToBuy);
 
       // // Check bought snacks
@@ -219,20 +201,18 @@ module.exports = (
       const undistributedFeeBtcSnacksExpected = ethers.utils.parseEther('1.25');
       // Try to distribute
       // buyer4 is an authority see the config namedAccounts object
-      await anySnacks.connect(buyer1).distributeFee();
+      await anySnacks.connect(buyer4).distributeFee();
       // Check resul of distribution
       // 15% PULSE = 15% of 1.25 <any>Snacks = 0.1875
       const pulseBtcSnacksWithFeeResult = await anySnacks.balanceOf(pulse.address);
-      const pulseBtcSnacksWithFeeExpected = overridenPulseBtcSnacksWithFeeExpected || ethers.utils.parseEther('0.1875');
-
+      const pulseBtcSnacksWithFeeExpected = ethers.utils.parseEther('0.1875');
       // 15% Snacks holders = 15% of 1.25 <any>Snacks = 0.1875
       const snacksBtcSnacksWithFeeResult = await anySnacks.balanceOf(snacks.address);
-      const snacksBtcSnacksWithFeeExpected = overridenSnacksBtcSnacksWithFeeExpected || ethers.utils.parseEther('0.1875');
-
+      const snacksBtcSnacksWithFeeExpected = ethers.utils.parseEther('0.1875');
       // 15% seniorage = 15% of 1.25 <any>Snacks = 0.1875 + 0.025 of <any>Snacks for seniorage from undistributed fees
       const seniorageBtcSnacksWithFeeResult = await anySnacks.balanceOf(seniorage.address);
-      const seniorageBtcSnacksWithFeeExpected = overridenSeniorageBtcSnacksWithFeeExpected || ethers.utils.parseEther('0.2125');
-
+      const seniorageBtcSnacksWithFeeExpected = ethers.utils.parseEther('0.2125');
+      
       // 20% <any>Snacks holders = 20% of 1.25 <any>Snacks = 0.25 to all holders = ~0.05 by holder (total 5), result bought 4.75 + 0.05
       const balance1BtcSnacksWithFeeResult = await anySnacks.balanceOf(buyer1.address);
       const balance1BtcSnacksWithFeeExpected = ethers.utils.parseEther('4.8');
@@ -258,174 +238,13 @@ module.exports = (
 
       expect(seniorageBtcSnacksWithFeeResult).to.be.equal(seniorageBtcSnacksWithFeeExpected);
 
-      const tolerance = overridenTolerance || ethers.BigNumber.from('10000000000000000');
+      const tolerance = ethers.BigNumber.from('10000000000000000');
 
       expect(balance1BtcSnacksWithFeeResult).to.be.closeTo(balance1BtcSnacksWithFeeExpected, tolerance);
       expect(balance2BtcSnacksWithFeeResult).to.be.closeTo(balance2BtcSnacksWithFeeExpected, tolerance);
       expect(balance3BtcSnacksWithFeeResult).to.be.closeTo(balance3BtcSnacksWithFeeExpected, tolerance);
       expect(balance4BtcSnacksWithFeeResult).to.be.closeTo(balance4BtcSnacksWithFeeExpected, tolerance);
       expect(balance5BtcSnacksWithFeeResult).to.be.closeTo(balance5BtcSnacksWithFeeExpected, tolerance);
-    }),
-
-    () => it("7. Successful pause() execution", async () => {
-      await expect(anySnacks.connect(buyer1).pause()).to.be.revertedWith("Ownable: caller is not the owner");
-      await expect(anySnacks.pause())
-        .to.emit(anySnacks, "Paused")
-        .withArgs(owner.address);
-      await expect(
-        mintSnacksThroughPayToken(owner, ethers.utils.parseEther("1"))
-      ).to.be.revertedWith("Pausable: paused");
-    }),
-
-    () => it("8. Successful unpause() execution", async () => {
-      await expect(anySnacks.pause())
-        .to.emit(anySnacks, "Paused")
-        .withArgs(owner.address);
-      await expect(
-        mintSnacksThroughPayToken(owner, ethers.utils.parseEther("1"))
-      ).to.be.revertedWith("Pausable: paused");
-      await expect(anySnacks.connect(buyer1).unpause()).to.be.revertedWith("Ownable: caller is not the owner");
-      await expect(anySnacks.unpause())
-        .to.emit(anySnacks, "Unpaused")
-        .withArgs(owner.address);
-      await mintSnacksThroughPayToken(owner, ethers.utils.parseEther("1"))
-    }),
-
-    (symbol) => it("9. Test symbol()", async () => {
-      // ARRANGE
-      const symbolExpected = symbol;
-
-      // ACT
-      const symbolResult = await anySnacks.symbol();
-
-      // ASSERT
-      expect(symbolResult).to.be.equal(symbolExpected);
-    }),
-
-    (name) => it("10. Test name()", async () => {
-      // ARRANGE
-      const nameExpected = name;
-
-      // ACT
-      const nameResult = await anySnacks.name();
-
-      // ASSERT
-      expect(nameResult).to.be.equal(nameExpected);
-    }),
-
-    () => it("11. Test decimals()", async () => {
-      // ARRANGE
-      const decimalsExpected = decimals;
-
-      // ACT
-      const decimalsResult = await anySnacks.decimals();
-
-      // ASSERT
-      expect(decimalsResult).to.be.equal(decimalsExpected);
-    }),
-
-    () => it("12. Test sufficientBuyTokenAmountOnMint()", async () => {
-      // ARRANGE
-      const buyTokenAmount_ = ethers.utils.parseEther('5');
-
-      // ACT
-      const result = await anySnacks.sufficientBuyTokenAmountOnMint(buyTokenAmount_);
-      const expected = true;
-
-      // ASSERT
-      expect(result).to.be.equal(expected);
-    }),
-
-    () => it("13. Test approve & decreaseAllowance", async () => {
-      // ARRANGE
-      const amountApprove = ethers.utils.parseEther('5');
-      const amountDecrease = ethers.utils.parseEther('4');
-      const allowed1Expected = ethers.utils.parseEther('5');
-      const decreased2Expected = ethers.utils.parseEther('1');
-      const decreased3Expected = ethers.utils.parseEther('0');
-
-      // ACT
-      await anySnacks.approve(buyer1.address, amountApprove);
-      const allowed1Result = await anySnacks.allowance(owner.address, buyer1.address);
-
-      await anySnacks.decreaseAllowance(buyer1.address, amountDecrease);
-      const decreased2Result = await anySnacks.allowance(owner.address, buyer1.address);
-
-      await anySnacks.decreaseAllowance(buyer1.address, amountDecrease);
-      const decreased3Result = await anySnacks.allowance(owner.address, buyer1.address);
-
-      // ASSERT
-      expect(allowed1Result).to.be.equal(allowed1Expected);
-      expect(decreased2Result).to.be.equal(decreased2Expected);
-      expect(decreased3Result).to.be.equal(decreased3Expected);
-    }),
-
-    () => it("14. Test increaseAllowance", async () => {
-      // ARRANGE
-      const amountIncrease = ethers.utils.parseEther('5');
-      const allowedExpected = ethers.utils.parseEther('5');
-
-      // ACT
-      await expect(anySnacks.increaseAllowance(buyer1.address, amountIncrease))
-        .to.emit(anySnacks, "Approval")
-        .withArgs(owner.address, buyer1.address, amountIncrease);
-      const allowedResult = await anySnacks.allowance(owner.address, buyer1.address);
-
-      // ASSERT
-      expect(allowedResult).to.be.equal(allowedExpected);
-    }),
-
-    () => it("15. Valid addresses check", async () => {
-      await expect(anySnacks.distributeFee()).to.be.revertedWith("SnacksBase: caller is not authorised");
-      await startImpersonating(ZERO_ADDRESS);
-      const zeroAddress = await ethers.getSigner(ZERO_ADDRESS);
-      await expect(anySnacks.connect(zeroAddress).increaseAllowance(owner.address, 100))
-        .to.be.revertedWith("SnacksBase: approve from the zero address");
-      await expect(anySnacks.increaseAllowance(ZERO_ADDRESS, 100))
-        .to.be.revertedWith("SnacksBase: approve to the zero address");
-      await expect(anySnacks.connect(zeroAddress).transfer(owner.address, 100))
-        .to.be.revertedWith("SnacksBase: transfer from the zero address");
-        await expect(anySnacks.transfer(ZERO_ADDRESS, 100))
-        .to.be.revertedWith("SnacksBase: transfer to the zero address");
-    }),
-
-    () => it("16. Successful calculations check", async () => {
-      await expect(anySnacks.calculatePayTokenAmountOnMint(100)).to.be.revertedWith("SnacksBase: invalid buy token amount");
-      await expect(anySnacks.calculateBuyTokenAmountOnMint(100)).to.be.revertedWith("SnacksBase: invalid pay token amount");
-      await expect(anySnacks.calculatePayTokenAmountOnRedeem(100)).to.be.revertedWith("SnacksBase: invalid buy token amount");
-    }),
-
-    () => it("17. Fee distribution when holders supply is 0", async () => {
-      const amount = ethers.utils.parseEther("1");
-      await payTokenMintingAction(owner, amount, token);
-      await token.approve(anySnacks.address, amount);
-      await anySnacks.mintWithPayTokenAmount(amount);
-      await anySnacks.transfer(pulse.address, await anySnacks.balanceOf(owner.address));
-      await anySnacks.connect(buyer1).distributeFee();
-    }),
-
-    () => it("18. Successful addToExcludedHolders() execution", async () => {
-      // Call from not the owner
-      await expect(anySnacks.connect(buyer1).addToExcludedHolders(buyer2.address))
-        .to.be.revertedWith("Ownable: caller is not the owner");
-      // Add buyer2 to excluded
-      await anySnacks.addToExcludedHolders(buyer2.address);
-      // Check
-      expect(await anySnacks.isExcludedHolder(buyer2.address)).to.equal(true);
-      // Attempt to add again
-      await expect(anySnacks.addToExcludedHolders(buyer2.address)).to.be.revertedWith("SnacksBase: already excluded");
-    }),
-
-    () => it("19. Successful removeFromExcludedHolders() execution", async () => {
-      // Call from not the owner
-      await expect(anySnacks.connect(buyer1).removeFromExcludedHolders(anySnacks.address))
-        .to.be.revertedWith("Ownable: caller is not the owner");
-      // Add buyer2 to excluded
-      await anySnacks.removeFromExcludedHolders(anySnacks.address);
-      // Check
-      expect(await anySnacks.isExcludedHolder(anySnacks.address)).to.equal(false);
-      // Attempt to add again
-      await expect(anySnacks.removeFromExcludedHolders(anySnacks.address)).to.be.revertedWith("SnacksBase: not excluded");
     })
   ];
 

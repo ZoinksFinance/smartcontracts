@@ -2,12 +2,11 @@
 pragma solidity 0.8.15;
 
 /**
-* @title Interface that can be used to interact with Snacks/BtcSnacks/EthSnacks contracts.
+* @title Необходимый интерфейс для контрактов,
+* использующих наследников от абстрактного контракта SnacksBase.
 */
 interface ISnacksBase {
-    function mintWithBuyTokenAmount(uint256 buyTokenAmount) external returns (uint256);
     function mintWithPayTokenAmount(uint256 payTokenAmount) external returns (uint256);
-    function isExcludedHolder(address account) external view returns (bool);
     function redeem(uint256 buyTokenAmount) external returns (uint256);
     function adjustmentFactor() external view returns (uint256);
     function sufficientBuyTokenAmountOnMint(

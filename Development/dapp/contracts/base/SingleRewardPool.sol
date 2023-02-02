@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.15;
 
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-import "../interfaces/ISingleRewardPool.sol";
-
-abstract contract SingleRewardPool is ISingleRewardPool, ReentrancyGuard, Ownable, Pausable {
+/**
+* @title Абстрактный стейкинг контракт,
+* реализующий логику вознаграждения стейкеров в одном наградном токене.
+* @dev Является базовым контрактом для всех стейкинг пулов,
+* которые вознаграждают стейкеров одним наградным токеном.
+*/
+abstract contract SingleRewardPool is ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 
     uint256 public rewardsDuration = 12 hours;
@@ -17,10 +20,10 @@ abstract contract SingleRewardPool is ISingleRewardPool, ReentrancyGuard, Ownabl
     uint256 public lastUpdateTime;
     uint256 public periodFinish;
     uint256 public rewardRate;
-    address public immutable stakingToken;
-    address public immutable rewardToken;
+    address public stakingToken;
     address public poolRewardDistributor;
     address public seniorage;
+    address public rewardToken;
 
     mapping(address => uint256) public balances;
     mapping(address => uint256) public userLastDepositTime;
@@ -32,8 +35,6 @@ abstract contract SingleRewardPool is ISingleRewardPool, ReentrancyGuard, Ownabl
     event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(address indexed user, uint256 reward);
     event RewardsDurationUpdated(uint256 newDuration);
-    event PoolRewardDistributorUpdated(address indexed poolRewardDistributor);
-    event SeniorageUpdated(address indexed seniorage);
     
     modifier onlyPoolRewardDistributor {
         require(
@@ -53,12 +54,10 @@ abstract contract SingleRewardPool is ISingleRewardPool, ReentrancyGuard, Ownabl
         _;
     }
     
-    /**
-    * @param stakingToken_ Staking token address.
-    * @param rewardToken_ Reward token address.
-    * @param poolRewardDistributor_ PoolRewardDistributor contract address.
-    * @param seniorage_ Seniorage contract address.
-    */
+    /// @param stakingToken_ Адрес токена, который стейкают пользователи.
+    /// @param rewardToken_ Адрес наградного токена.
+    /// @param poolRewardDistributor_ Адрес контракта PoolRewardDistributor.
+    /// @param seniorage_ Адрес контракта Seniorage.
     constructor(
         address stakingToken_,
         address rewardToken_,
@@ -71,46 +70,25 @@ abstract contract SingleRewardPool is ISingleRewardPool, ReentrancyGuard, Ownabl
         seniorage = seniorage_;
     }
 
-    /**
-    * @notice Sets the PoolRewardDistributor contract address.
-    * @dev Could be called by the owner in case of address reset.
-    * @param poolRewardDistributor_ PoolRewardDistributor contract address.
-    */
+    /// @notice Функция, реализующая логику переустановки адреса контракта PoolRewardDistributor.
+    /// @dev Функция может быть вызвана только владельцем контракта.
+    /// @param poolRewardDistributor_ Адрес нового контракта PoolRewardDistributor.
     function setPoolRewardDistributor(address poolRewardDistributor_) external onlyOwner {
         poolRewardDistributor = poolRewardDistributor_;
-        emit PoolRewardDistributorUpdated(poolRewardDistributor_);
     }
     
-    /**
-    * @notice Sets the Seniorage contract address.
-    * @dev Could be called by the owner in case of address reset.
-    * @param seniorage_ Seniorage contract address.
-    */
+    /// @notice Функция, реализующая логику переустановки адреса контракта Seniorage.
+    /// @dev Функция может быть вызвана только владельцем контракта.
+    /// @param seniorage_ Адрес нового контракта Seniorage.
     function setSeniorage(address seniorage_) external onlyOwner {
         seniorage = seniorage_;
-        emit SeniorageUpdated(seniorage_);
-    }
-
-    /**
-    * @notice Triggers stopped state.
-    * @dev Could be called by the owner in case of resetting addresses.
-    */
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    /**
-    * @notice Returns to normal state.
-    * @dev Could be called by the owner in case of resetting addresses.
-    */
-    function unpause() external onlyOwner {
-        _unpause();
     }
     
     /**
-    * @notice Sets rewards duration.
-    * @dev Could be called only by the owner.
-    * @param rewardsDuration_ New rewards duration value.
+    * @notice Функция, реализующая логику переустановки `rewardsDuration`.
+    * @dev Функция может быть вызвана только владельцем контракта
+    * и не раньше срока окончания `periodFinish`.
+    * @param rewardsDuration_ Новое значение для `rewardsDuration` в секундах.
     */
     function setRewardsDuration(uint256 rewardsDuration_) external onlyOwner {
         require(
@@ -121,16 +99,12 @@ abstract contract SingleRewardPool is ISingleRewardPool, ReentrancyGuard, Ownabl
         emit RewardsDurationUpdated(rewardsDuration);
     }
     
-    /**
-    * @notice Deposits tokens for the user.
-    * @dev Updates user's last deposit time. The deposit amount of tokens cannot be equal to 0.
-    * @param amount_ Amount of tokens to deposit.
-    */
+    /// @notice Функция, реализующая логику стейкинга пользователем.
+    /// @param amount_ Количество токенов для стейка.
     function stake(
         uint256 amount_
     ) 
         external 
-        whenNotPaused
         nonReentrant 
         updateReward(msg.sender) 
     {
@@ -146,23 +120,24 @@ abstract contract SingleRewardPool is ISingleRewardPool, ReentrancyGuard, Ownabl
     }
     
     /**
-    * @notice Withdraws all tokens deposited by the user and gets rewards for him.
-    * @dev Withdrawal comission is the same as for the `withdraw()` function.
+    * @notice Функция, реализующая логику вывода всего стейка
+    * и снятия заработанной пользователем награды.
     */
-    function exit() external whenNotPaused {
+    function exit() external {
         withdraw(balances[msg.sender]);
         getReward();
     }
     
     /**
-    * @notice Notifies the contract of an incoming reward and recalculates the reward rate.
-    * @dev Called by the PoolRewardDistributor contract once every 12 hours.
-    * @param reward_ Reward amount.
+    * @notice Функция, реализующая логику уведомления стейкинг пула о пришедшей награде,
+    * а также пересчета скорости раздачи награды.
+    * @dev Функция может быть вызвана только контрактом PoolRewardDistributor раз в 12 часов.
+    * @param reward_ Размер награды.
     */
     function notifyRewardAmount(
         uint256 reward_
     ) 
-        external
+        external 
         onlyPoolRewardDistributor 
         updateReward(address(0)) 
     {
@@ -184,30 +159,21 @@ abstract contract SingleRewardPool is ISingleRewardPool, ReentrancyGuard, Ownabl
     }
     
     /**
-    * @notice Retrieves the total reward amount for duration.
-    * @dev The function allows to get the amount of reward to be distributed in the current period.
-    * @return Total reward amount for duration.
+    * @notice Функция, реализующая логику подсчета общей награды,
+    * которая заработается за `rewardsDuration`.
+    * @dev Скорость раздачи награды может поменяться спустя время,
+    * поэтому эта функция не претендует на точность.
     */
     function getRewardForDuration() external view returns (uint256) {
         return rewardRate * rewardsDuration;
     }
     
     /**
-    * @notice Withdraws desired amount of deposited tokens for the user.
-    * @dev If 24 hours have not yet passed since the last deposit by the user, 
-    * a fee of 50% is charged from the withdrawn amount of deposited tokens
-    * and sent to the Seniorage contract, otherwise a 10% fee will be instead of 50%. 
-    * The withdrawn amount of tokens cannot exceed the amount of the deposit or be equal to 0.
-    * @param amount_ Desired amount of tokens to withdraw.
+    * @notice Функция, реализующая логику вывода из стейкинга
+    * произвольного количества токенов пользователем.
+    * @param amount_ Количество токенов для вывода.
     */
-    function withdraw(
-        uint256 amount_
-    ) 
-        public 
-        whenNotPaused 
-        nonReentrant 
-        updateReward(msg.sender) 
-    {
+    function withdraw(uint256 amount_) public nonReentrant updateReward(msg.sender) {
         require(
             amount_ > 0, 
             "SingleRewardPool: can not withdraw 0"
@@ -215,21 +181,20 @@ abstract contract SingleRewardPool is ISingleRewardPool, ReentrancyGuard, Ownabl
         totalSupply -= amount_;
         balances[msg.sender] -= amount_;
         uint256 seniorageFeeAmount;
-        if (block.timestamp < userLastDepositTime[msg.sender] + 1 days) {
+        if (block.timestamp <= userLastDepositTime[msg.sender] + 1 days) {
             seniorageFeeAmount = amount_ / 2;
+            IERC20(stakingToken).safeTransfer(seniorage, seniorageFeeAmount);
+            IERC20(stakingToken).safeTransfer(msg.sender, amount_ - seniorageFeeAmount);
         } else {
             seniorageFeeAmount = amount_ / 10;
+            IERC20(stakingToken).safeTransfer(seniorage, seniorageFeeAmount);
+            IERC20(stakingToken).safeTransfer(msg.sender, amount_ - seniorageFeeAmount);
         }
-        IERC20(stakingToken).safeTransfer(seniorage, seniorageFeeAmount);
-        IERC20(stakingToken).safeTransfer(msg.sender, amount_ - seniorageFeeAmount);
         emit Withdrawn(msg.sender, amount_ - seniorageFeeAmount);
     }
 
-    /**
-    * @notice Transfers rewards to the user.
-    * @dev There are no fees on the reward.
-    */
-    function getReward() public whenNotPaused nonReentrant updateReward(msg.sender) {
+    /// @notice Функция, реализующая логику снятия заработанной пользователем награды.
+    function getReward() public nonReentrant updateReward(msg.sender) {
         uint256 reward = rewards[msg.sender];
         if (reward > 0) {
             rewards[msg.sender] = 0;
@@ -239,18 +204,16 @@ abstract contract SingleRewardPool is ISingleRewardPool, ReentrancyGuard, Ownabl
     }
     
     /**
-    * @notice Retrieves the last time reward was applicable.
-    * @dev Allows the contract to correctly calculate rewards earned by users.
-    * @return Last time reward was applicable.
+    * @notice Функция, реализующая логику корректного вычисления разницы во времени
+    * между последним обновлением `lastUpdateTime` и `periodFinish`.
     */
     function lastTimeRewardApplicable() public view returns (uint256) {
         return block.timestamp < periodFinish ? block.timestamp : periodFinish;
     }
     
     /**
-    * @notice Retrieves the amount of reward per token staked.
-    * @dev The logic is derived from the StakingRewards contract.
-    * @return Amount of reward per token staked.
+    * @notice Функция, реализующая логику вычисления количества награды
+    * за один стейкнутый токен.
     */
     function rewardPerToken() public view returns (uint256) {
         if (totalSupply == 0) {
@@ -265,10 +228,9 @@ abstract contract SingleRewardPool is ISingleRewardPool, ReentrancyGuard, Ownabl
     }
     
     /**
-    * @notice Retrieves the amount of rewards earned by the user.
-    * @dev The logic is derived from the StakingRewards contract.
-    * @param user_ User address.
-    * @return Amount of rewards earned by the user.
+    * @notice Функция, реализующая логику вычисления количества
+    * заработанной пользователем награды.
+    * @param user_ Адрес пользователя.
     */
     function earned(address user_) public view returns (uint256) {
         return

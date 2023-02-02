@@ -3,22 +3,21 @@ pragma solidity 0.8.15;
 
 import "./base/SingleRewardPool.sol";
 
+/// @title Стейкинг контракт для держателей BiSwap LP токенов.
 contract BiSwapPool is SingleRewardPool {
-    /**
-    * @param bswLP_ Biswap LPs token address.
-    * @param zoinks_ Zoinks token address.
-    * @param poolRewardDistributor_ PoolRewardDistributor contract address.
-    * @param seniorage_ Seniorage contract address.
-    */
+    /// @param stakingToken_ Адрес токена, который стейкают пользователи.
+    /// @param rewardToken_ Адрес наградного токена.
+    /// @param poolRewardDistributor_ Адрес контракта PoolRewardDistributor.
+    /// @param seniorage_ Адрес контракта Seniorage.
     constructor(
-        address bswLP_,
-        address zoinks_,
+        address stakingToken_,
+        address rewardToken_,
         address poolRewardDistributor_,
         address seniorage_
     )
         SingleRewardPool(
-            bswLP_,
-            zoinks_,
+            stakingToken_,
+            rewardToken_,
             poolRewardDistributor_,
             seniorage_
         )

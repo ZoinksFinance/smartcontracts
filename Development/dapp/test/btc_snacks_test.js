@@ -1,5 +1,4 @@
-const hre = require("hardhat");
-const { ethers, deployments } = hre;
+const { ethers, deployments } = require("hardhat");
 const snacksBaseTestSuite = require('../reusable_test_suits/snacks_base_test_suite.js');
 
 describe("BtcSnacks", () => {
@@ -8,21 +7,16 @@ describe("BtcSnacks", () => {
     await deployments.fixture(['btc_snacks_test_fixtures']);
   });
 
-  const testCases = snacksBaseTestSuite(
-    [9, 10],
+  snacksBaseTestSuite(
+    [],
     async () => await ethers.getContractAt(
-      hre.names.internal.btcSnacks,
-      (await deployments.get(hre.names.internal.btcSnacks)).address
-    ),
+        "BtcSnacks",
+        (await deployments.get("BtcSnacks")).address
+      ),
     async () => await ethers.getContractAt(
-      hre.names.internal.mockToken,
-      (await deployments.get(hre.names.external.tokens.btc)).address
-    ),
+        "MockToken",
+        (await deployments.get("BTC")).address
+      ),
     async (who, amount, lpToken) => await lpToken.mint(who.address, amount)
   );
-
-  testCases[9]("BSNACK");
-
-  testCases[10]("btcSnacks");
-
 });

@@ -17,50 +17,52 @@ module.exports = async ({
 }) => {
   const {deploy, save, execute} = deployments;
   const {
-    deployer
+    deployer,
+    firstRewardReceiver,
+    secondRewardReceiver
   } = await getNamedAccounts();
 
   const zoinks = await ethers.getContractAt(
-    hre.names.internal.zoinks,
-    (await deployments.get(hre.names.internal.zoinks)).address
+    'Zoinks',
+    (await deployments.get('Zoinks')).address
   );
   const busd = await ethers.getContractAt(
-    hre.names.internal.mockToken,
-    (await deployments.get(hre.names.external.tokens.busd)).address
+    'MockToken',
+    (await deployments.get('BUSD')).address
   );
   const eth = await ethers.getContractAt(
-    hre.names.internal.mockToken,
-    (await deployments.get(hre.names.external.tokens.eth)).address
+    'MockToken',
+    (await deployments.get('ETH')).address
   );
   const btc = await ethers.getContractAt(
-    hre.names.internal.mockToken,
-    (await deployments.get(hre.names.external.tokens.btc)).address
+    'MockToken',
+    (await deployments.get('BTC')).address
   );
   const pancakeSwapPool = await ethers.getContractAt(
-    hre.names.internal.pancakeSwapPool,
-    (await deployments.get(hre.names.internal.pancakeSwapPool)).address
+    'PancakeSwapPool',
+    (await deployments.get('PancakeSwapPool')).address
   );
   const pulse = await ethers.getContractAt(
-    hre.names.internal.pulse,
-    (await deployments.get(hre.names.internal.pulse)).address
+    'Pulse',
+    (await deployments.get('Pulse')).address
   );
   const snacksPool = await ethers.getContractAt(
-    hre.names.internal.snacksPool,
-    (await deployments.get(hre.names.internal.snacksPool)).address
+    'SnacksPool',
+    (await deployments.get('SnacksPool')).address
   );
 
-  const snacksAddress = (await deployments.get(hre.names.internal.snacks)).address;
-  const snacks = await ethers.getContractAt(hre.names.internal.snacks, snacksAddress);
+  const snacksAddress = (await deployments.get("Snacks")).address;
+  const snacks = await ethers.getContractAt('Snacks', snacksAddress);
 
-  const btcSnacksAddress = (await deployments.get(hre.names.internal.btcSnacks)).address;
-  const btcSnacks = await ethers.getContractAt(hre.names.internal.btcSnacks, btcSnacksAddress);
+  const btcSnacksAddress = (await deployments.get("BtcSnacks")).address;
+  const btcSnacks = await ethers.getContractAt('BtcSnacks', btcSnacksAddress);
 
-  const ethSnacksAddress = (await deployments.get(hre.names.internal.ethSnacks)).address;
-  const ethSnacks = await ethers.getContractAt(hre.names.internal.ethSnacks, ethSnacksAddress);
+  const ethSnacksAddress = (await deployments.get("EthSnacks")).address;
+  const ethSnacks = await ethers.getContractAt('EthSnacks', ethSnacksAddress);
 
-  const pairAddress = (await deployments.get(hre.names.external.pairs.pancake.lp)).address;
+  const pairAddress = (await deployments.get("PancakePairLP")).address;
   
-  const seniorageAddress = (await deployments.get(hre.names.internal.seniorage)).address;
+  const seniorageAddress = (await deployments.get("Seniorage")).address;
 
   const initialBalance = ethers.utils.parseEther("1000000000");
 
@@ -73,15 +75,15 @@ module.exports = async ({
   await zoinks.mint(initialBalance);
 
   await pulse.configure(
-    pairAddress,
-    zoinks.address,
-    snacks.address,
-    btcSnacks.address,
-    ethSnacks.address,
-    pancakeSwapPool.address,
-    snacksPool.address,
-    seniorageAddress,
-    deployer
+      pairAddress,
+      zoinks.address,
+      snacks.address,
+      btcSnacks.address,
+      ethSnacks.address,
+      pancakeSwapPool.address,
+      snacksPool.address,
+      seniorageAddress,
+      deployer
   );
 
   // Snacks buying
@@ -99,7 +101,7 @@ module.exports = async ({
   await ethSnacks.mintWithBuyTokenAmount(amountToBuy);
 
   await mockSwaps(
-    hre.names.external.routers.pancake,
+    'PancakeSwapRouter',
     deployments,
     ZERO,
     deployer,

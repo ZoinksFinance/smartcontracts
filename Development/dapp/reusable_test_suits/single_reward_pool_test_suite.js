@@ -230,32 +230,6 @@ module.exports = (
       await expect(pool.connect(alice).notifyRewardAmount(amountToTransfer))
         .to.be.reverted;
       await pool.notifyRewardAmount(amountToTransfer);
-    }),
-
-    () => it("Successful pause() execution", async () => {
-      // Pause from not the owner
-      await expect(pool.connect(alice).pause())
-        .to.be.revertedWith("Ownable: caller is not the owner");
-      // Pause from the owner
-      await pool.pause();
-      // Attempt to call
-      await expect(pool.exit()).to.be.revertedWith("Pausable: paused");
-    }),
-
-    () => it("Successful unpause() execution", async () => {
-      // Pause from the owner
-      await pool.pause();
-      // Unpause from not the owner
-      await expect(pool.connect(alice).unpause())
-        .to.be.revertedWith("Ownable: caller is not the owner");
-      // Attempt to call
-      await expect(pool.exit()).to.be.revertedWith("Pausable: paused");
-      // Unpause from the owner
-      await pool.unpause();
-      // Successful call
-      await lpToken.approve(pool.address, 1000);
-      await pool.stake(1000);
-      await pool.exit();
     })
   ];
 

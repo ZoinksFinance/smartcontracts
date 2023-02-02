@@ -1,31 +1,41 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.15;
 
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/math/Math.sol";
 
+import "./interfaces/IRouter.sol";
 import "./interfaces/ISnacksBase.sol";
 import "./interfaces/IAveragePriceOracle.sol";
 
-contract Zoinks is ERC20, Ownable, ReentrancyGuard, Pausable {
+/// @title Контракт ZOINKS токена.
+contract Zoinks is ERC20, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    address public constant DEAD_ADDRESS = 0x000000000000000000000000000000000000dEaD;
-    uint256 public constant MAX_SUPPLY = 35000000000000 * 1e18;
-    uint256 private constant BASE_PERCENT = 10000;
-    uint256 private constant EMISSION_LIMIT_PERCENT = 1000;
-    uint256 private constant BUY_SNACKS_PERCENT = 1500;
-    uint256 private constant SENIORAGE_PERCENT = 2000;
-    uint256 private constant PULSE_PERCENT = 3333;
-    uint256 private constant POOL_REWARD_DISTRIBUTOR_PERCENT = 6500;
-    uint256 private constant ISOLATE_PERCENT = 6667;
-    uint256 private constant EMISSION_PERCENT = 10001;
+    enum Dex {
+        APE_SWAP,
+        BI_SWAP,
+        PANCAKE_SWAP
+    }
 
-    address public immutable busd;
+    address constant public DEAD_ADDRESS = 0x000000000000000000000000000000000000dEaD;
+    uint256 constant public MAX_SUPPLY = 35000000000 ether;
+    uint256 constant private BASE_PERCENT = 10000;
+    uint256 constant private EMISSION_LIMIT_PERCENT = 1000;
+    uint256 constant private BUY_SNACKS_PERCENT = 1500;
+    uint256 constant private SENIORAGE_PERCENT = 2000;
+    uint256 constant private PULSE_PERCENT = 3333;
+    uint256 constant private POOL_REWARD_DISTRIBUTOR_PERCENT = 6500;
+    uint256 constant private ISOLATE_PERCENT = 6667;
+    uint256 constant private EMISSION_PERCENT = 10100;
+
+    address public busd;
+    address public apeSwapRouter;
+    address public biSwapRouter;
+    address public pancakeSwapRouter;
     address public authority;
     address public seniorage;
     address public pulse;
@@ -35,8 +45,12 @@ contract Zoinks is ERC20, Ownable, ReentrancyGuard, Pausable {
     uint256 public buffer;
     uint256 public zoinksAmountStored;
 
-    event BufferUpdated(uint256 buffer);
-    event TimeWeightedAveragePrice(uint256 TWAP);
+    event Swap(
+        address indexed sender,
+        uint256 amountIn,
+        uint256 amountOut,
+        Dex dex
+    );
 
     modifier onlyAuthority {
         require(
@@ -46,23 +60,35 @@ contract Zoinks is ERC20, Ownable, ReentrancyGuard, Pausable {
         _;
     }
 
-    /**
-    * @param busd_ Binance-Peg BUSD token address.
-    */
-    constructor(address busd_) ERC20("Zoinks", "HZUSD") {
+    /// @param busd_ Адрес BUSD токена.
+    /// @param apeSwapRouter_ Адрес ApeSwap роутера.
+    /// @param biSwapRouter_ Адрес BiSwap роутера.
+    /// @param pancakeSwapRouter_ Адрес PancakeSwap роутера.
+    constructor(
+        address busd_,
+        address apeSwapRouter_,
+        address biSwapRouter_,
+        address pancakeSwapRouter_
+    )
+        ERC20("Zoinks", "ZOINKS")
+    {
         busd = busd_;
+        apeSwapRouter = apeSwapRouter_;
+        biSwapRouter = biSwapRouter_;
+        pancakeSwapRouter = pancakeSwapRouter_;
+        IERC20(busd_).approve(apeSwapRouter_, type(uint256).max);
+        IERC20(busd_).approve(biSwapRouter_, type(uint256).max);
+        IERC20(busd_).approve(pancakeSwapRouter_, type(uint256).max);
     }
 
-    /**
-    * @notice Configures the contract.
-    * @dev Could be called by the owner in case of resetting addresses.
-    * @param authority_ Authorised address.
-    * @param seniorage_ Seniorage contract address.
-    * @param pulse_ Pulse contract address.
-    * @param snacks_ Snacks token address.
-    * @param poolRewardDistributor_ PoolRewardDistributor contract address.
-    * @param averagePriceOracle_ AveragePriceOracle contract address.
-    */
+    /// @notice Функция, реализующая логику настройки контракта.
+    /// @dev Функция может быть вызвана только владельцем контракта.
+    /// @param authority_ Адрес EOA, имеющего доступ к вызову функции {applyTWAP}.
+    /// @param seniorage_ Адрес контракта Seniorage.
+    /// @param pulse_ Адрес контракта Pulse.
+    /// @param snacks_ Адрес SNACKS токена.
+    /// @param poolRewardDistributor_ Адрес контракта PoolRewardDistributor.
+    /// @param averagePriceOracle_ Адрес контракта AveragePriceOracle.
     function configure(
         address authority_,
         address seniorage_,
@@ -85,39 +111,18 @@ contract Zoinks is ERC20, Ownable, ReentrancyGuard, Pausable {
         }
     }
 
-    /**
-    * @notice Triggers stopped state.
-    * @dev Could be called by the owner in case of resetting addresses.
-    */
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    /**
-    * @notice Returns to normal state.
-    * @dev Could be called by the owner in case of resetting addresses.
-    */
-    function unpause() external onlyOwner {
-        _unpause();
-    }
-
-    /**
-    * @notice Sets buffer parameter.
-    * @dev Used for emission control. It does regulate the granularity 
-    * of the emission parts (by multiplying the max amount of percents).
-    * @param buffer_ New buffer parameter.
-    */
+    /// @notice Функция, реализующая логику установки или переустановки `buffer`.
+    /// @param buffer_ Новое значение для `buffer`.
     function setBuffer(uint256 buffer_) external onlyOwner {
         buffer = buffer_;
-        emit BufferUpdated(buffer_);
     }
 
     /**
-    * @notice Mints Zoinks for Binance-Peg BUSD at a ratio of 1 to 1.
-    * @dev All spent Binance-Peg BUSD tokens are sent to the Seniorage contract.
-    * @param amount_ Amount of Zoinks to mint.
+    * @notice Функция, реализующая логику минта ZOINKS токенов
+    * в обмен на BUSD токены в соотношении 1:1.
+    * @param amount_ Количество ZOINKS токенов для минта.
     */
-    function mint(uint256 amount_) external whenNotPaused nonReentrant {
+    function mint(uint256 amount_) external nonReentrant {
         require(
             amount_ > 0,
             "Zoinks: invalid amount"
@@ -131,28 +136,98 @@ contract Zoinks is ERC20, Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
-    * @notice Applies TWAP. If its value is greater than or equal to 1.0001, 
-    * the emission starts, otherwise nothing happens.
-    * @dev Called by the authorised address once every 12 hours.
+    * @notice Функция, реализующая логику обмена BUSD токенов на ZOINKS токены через
+    * BiSwap, ApeSwap или PancakeSwap.
+    * @param amountIn_ Количество BUSD токенов для обмена.
+    * @param amountOutMin_ Минимальное ожидаемое количество ZOINKS токенов к получению после обмена.
+    * @param deadline_ Время, после которого транзакцию считать недействительной.
+    * @param dex_ Параметр, определяющий то, через какой DEX
+    * провести обмен (BiSwap, ApeSwap или PancakeSwap).
     */
-    function applyTWAP() external whenNotPaused onlyAuthority {
-        IAveragePriceOracle(averagePriceOracle).update();
-        uint256 TWAP = IAveragePriceOracle(averagePriceOracle).twapLast();
-        emit TimeWeightedAveragePrice(TWAP);
-        if (TWAP >= EMISSION_PERCENT) {
-            _emission(TWAP);
+    function swapOnZoinks(
+        uint256 amountIn_,
+        uint256 amountOutMin_,
+        uint256 deadline_,
+        Dex dex_
+    )
+        external
+    {
+        require(
+            amountIn_ > 0,
+            "Zoinks: invalid amountIn"
+        );
+        require(
+            amountOutMin_ > 0,
+            "Zoinks: invalid amountOutMin"
+        );
+        require(
+            deadline_ >= block.timestamp,
+            "Zoinks: invalid deadline"
+        );
+        IERC20(busd).safeTransferFrom(msg.sender, address(this), amountIn_);
+        address[] memory path = new address[](2);
+        path[0] = busd;
+        path[1] = address(this);
+        if (dex_ == Dex.APE_SWAP) {
+            uint256[] memory amounts = IRouter(apeSwapRouter).swapExactTokensForTokens(
+                amountIn_,
+                amountOutMin_,
+                path,
+                msg.sender,
+                deadline_
+            );
+            emit Swap(
+                msg.sender,
+                amountIn_,
+                amounts[1],
+                dex_
+            );
+        } else if (dex_ == Dex.BI_SWAP) {
+            uint256[] memory amounts = IRouter(biSwapRouter).swapExactTokensForTokens(
+                amountIn_,
+                amountOutMin_,
+                path,
+                msg.sender,
+                deadline_
+            );
+            emit Swap(
+                msg.sender,
+                amountIn_,
+                amounts[1],
+                dex_
+            );
+        } else {
+            uint256[] memory amounts = IRouter(pancakeSwapRouter).swapExactTokensForTokens(
+                amountIn_,
+                amountOutMin_,
+                path,
+                msg.sender,
+                deadline_
+            );
+            emit Swap(
+                msg.sender,
+                amountIn_,
+                amounts[1],
+                dex_
+            );
         }
     }
 
     /**
-    * @notice Implements the logic of Zoinks token emission.
-    * @dev The emission percentage cannot exceed 10%. 
-    * The emission itself is controlled by the buffer parameter.
-    * Distribution of the emission amount: 65% goes to the PoolRewardDistributor contract,
-    * 20% goes to the Seniorage contract, the remaining 15% is used for mint Snacks tokens
-    * (66.67% of which are isolated to maintain the floor price and 33.33% goes to the Pulse contract).
-    * @param TWAP_ Time-weighted average price for 12 hours.
+    * @notice Функция, реализующая логику проверки текущего TWAP. Если он больше,
+    * чем 1.01, то запускается эмиссия.
+    * @dev Функция может быть вызвана только authority адресом. Вызывается раз в 12 часов.
     */
+    function applyTWAP() external onlyAuthority {
+        IAveragePriceOracle(averagePriceOracle).update();
+        uint256 TWAP = IAveragePriceOracle(averagePriceOracle).twapLast();
+        if (TWAP > EMISSION_PERCENT) {
+            _emission(TWAP);
+        }
+    }
+
+    /// @notice Функция, реализующая логику эмиссии ZOINKS токенов, а также распределения этой эмиссии.
+    /// @param TWAP_ TWAP за 12 часов.
     function _emission(uint256 TWAP_) private {
         uint256 emissionPercent = Math.min(TWAP_ - BASE_PERCENT, EMISSION_LIMIT_PERCENT);
         uint256 emissionAmount = emissionPercent * totalSupply() / (BASE_PERCENT * buffer);
@@ -165,11 +240,10 @@ contract Zoinks is ERC20, Ownable, ReentrancyGuard, Pausable {
         uint256 amountOfZoinksToBuySnacks = emissionAmount * BUY_SNACKS_PERCENT / BASE_PERCENT;
         _mint(address(this), amountOfZoinksToBuySnacks);
         uint256 zoinksAmount = amountOfZoinksToBuySnacks + zoinksAmountStored;
-        address snacksAddress = snacks;
-        if (ISnacksBase(snacksAddress).sufficientPayTokenAmountOnMint(zoinksAmount)) {
-            uint256 snacksAmount = ISnacksBase(snacksAddress).mintWithPayTokenAmount(zoinksAmount);
-            IERC20(snacksAddress).safeTransfer(DEAD_ADDRESS, snacksAmount * ISOLATE_PERCENT / BASE_PERCENT);
-            IERC20(snacksAddress).safeTransfer(pulse, snacksAmount * PULSE_PERCENT / BASE_PERCENT);
+        if (ISnacksBase(snacks).sufficientPayTokenAmountOnMint(zoinksAmount)) {
+            uint256 snacksAmount = ISnacksBase(snacks).mintWithPayTokenAmount(zoinksAmount);
+            IERC20(snacks).safeTransfer(DEAD_ADDRESS, snacksAmount * ISOLATE_PERCENT / BASE_PERCENT);
+            IERC20(snacks).safeTransfer(pulse, snacksAmount * PULSE_PERCENT / BASE_PERCENT);
             if (zoinksAmountStored != 0) {
                 zoinksAmountStored = 0;
             }

@@ -1,21 +1,24 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.15;
 
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
-import "../interfaces/IMultipleRewardPool.sol";
-
-abstract contract MultipleRewardPool is IMultipleRewardPool, ReentrancyGuard, Ownable, Pausable {
+/**
+* @title Абстрактный стейкинг контракт,
+* реализующий логику вознаграждения стейкеров в нескольких наградных токенах.
+* @dev Является базовым контрактом для всех стейкинг пулов,
+* которые вознаграждают стейкеров несколькими наградными токенами.
+*/
+abstract contract MultipleRewardPool is ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
 
     uint256 public rewardsDuration = 12 hours;
-    uint256 private _totalSupply;
-    address public immutable stakingToken;
+    uint256 internal _totalSupply;
+    address public stakingToken;
     address public poolRewardDistributor;
     address public seniorage;
     
@@ -34,8 +37,6 @@ abstract contract MultipleRewardPool is IMultipleRewardPool, ReentrancyGuard, Ow
     event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(address indexed rewardToken, address indexed user, uint256 reward);
     event RewardsDurationUpdated(uint256 newDuration);
-    event PoolRewardDistributorUpdated(address indexed poolRewardDistributor);
-    event SeniorageUpdated(address indexed seniorage);
     
     modifier onlyPoolRewardDistributor {
         require(
@@ -63,12 +64,10 @@ abstract contract MultipleRewardPool is IMultipleRewardPool, ReentrancyGuard, Ow
         _;
     }
     
-    /**
-    * @param stakingToken_ Staking token address.
-    * @param poolRewardDistributor_ PoolRewardDistributor contract address.
-    * @param seniorage_ Seniorage contract address.
-    * @param rewardTokens_ Reward token addresses.
-    */
+    /// @param stakingToken_ Адрес токена, который стейкают пользователи.
+    /// @param poolRewardDistributor_ Адрес контракта PoolRewardDistributor.
+    /// @param seniorage_ Адрес контракта Seniorage.
+    /// @param rewardTokens_ Адреса наградных токенов.
     constructor(
         address stakingToken_,
         address poolRewardDistributor_,
@@ -83,46 +82,25 @@ abstract contract MultipleRewardPool is IMultipleRewardPool, ReentrancyGuard, Ow
         }
     }
     
-    /**
-    * @notice Sets the PoolRewardDistributor contract address.
-    * @dev Could be called by the owner in case of address reset.
-    * @param poolRewardDistributor_ PoolRewardDistributor contract address.
-    */
+    /// @notice Функция, реализующая логику переустановки адреса контракта PoolRewardDistributor.
+    /// @dev Функция может быть вызвана только владельцем контракта.
+    /// @param poolRewardDistributor_ Адрес нового контракта PoolRewardDistributor.
     function setPoolRewardDistributor(address poolRewardDistributor_) external onlyOwner {
         poolRewardDistributor = poolRewardDistributor_;
-        emit PoolRewardDistributorUpdated(poolRewardDistributor_);
     }
     
-    /**
-    * @notice Sets the Seniorage contract address.
-    * @dev Could be called by the owner in case of address reset.
-    * @param seniorage_ Seniorage contract address.
-    */
+    /// @notice Функция, реализующая логику переустановки адреса контракта Seniorage.
+    /// @dev Функция может быть вызвана только владельцем контракта.
+    /// @param seniorage_ Адрес нового контракта Seniorage.
     function setSeniorage(address seniorage_) external onlyOwner {
         seniorage = seniorage_;
-        emit SeniorageUpdated(seniorage_);
-    }
-
-    /**
-    * @notice Triggers stopped state.
-    * @dev Could be called by the owner in case of resetting addresses.
-    */
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    /**
-    * @notice Returns to normal state.
-    * @dev Could be called by the owner in case of resetting addresses.
-    */
-    function unpause() external onlyOwner {
-        _unpause();
     }
     
     /**
-    * @notice Sets rewards duration.
-    * @dev Could be called only by the owner.
-    * @param rewardsDuration_ New rewards duration value.
+    * @notice Функция, реализующая логику переустановки rewardsDuration.
+    * @dev Функция может быть вызвана только владельцем контракта
+    * и не раньше срока окончания `periodFinishPerToken`.
+    * @param rewardsDuration_ Новое значение `rewardsDuration` в секундах.
     */
     function setRewardsDuration(uint256 rewardsDuration_) external onlyOwner {
         bool finished = true;
@@ -139,17 +117,32 @@ abstract contract MultipleRewardPool is IMultipleRewardPool, ReentrancyGuard, Ow
         emit RewardsDurationUpdated(rewardsDuration_);
     }
     
-    /**
-    * @notice Deposits tokens for the user.
-    * @dev Updates user's last deposit time. The deposit amount of tokens cannot be equal to 0.
-    * @param amount_ Amount of tokens to deposit.
-    */
+    /// @notice Функция, реализующая логику добавления нового наградного токена.
+    /// @dev Функция может быть вызвана только владельцем контракта.
+    /// @param rewardToken_ Адрес нового наградного токена.
+    function addRewardToken(address rewardToken_) external onlyOwner {
+        require(
+            _rewardTokens.add(rewardToken_), 
+            "MultipleRewardPool: already contains"
+        );
+    }
+    
+    /// @notice Функция, реализующая логику удаления одного из существующих наградных токенов.
+    /// @dev Функция может быть вызвана только владельцем контракта.
+    /// @param rewardToken_ Адрес одного из существующих наградных токенов.
+    function removeRewardToken(address rewardToken_) external onlyOwner {
+        require(
+            _rewardTokens.remove(rewardToken_), 
+            "MultipleRewardPool: not found"
+        );
+    }
+    
+    /// @notice Функция, реализующая логику стейкинга пользователем.
+    /// @param amount_ Количество токенов для стейка.
     function stake(
         uint256 amount_
     ) 
         external 
-        virtual
-        whenNotPaused
         nonReentrant 
         updateReward(msg.sender) 
     {
@@ -165,20 +158,20 @@ abstract contract MultipleRewardPool is IMultipleRewardPool, ReentrancyGuard, Ow
     }
     
     /**
-    * @notice Withdraws all tokens deposited by the user and gets rewards for him.
-    * @dev Withdrawal comission is the same as for the `withdraw()` function.
+    * @notice Функция, реализующая логику вывода всего стейка
+    * и снятия заработанных пользователем наград.
     */
-    function exit() external whenNotPaused {
-        withdraw(getBalance(msg.sender));
+    function exit() external {
+        withdraw(_balances[msg.sender]);
         getReward();
     }
     
     /**
-    * @notice Notifies the contract of an incoming reward in one of the reward tokens 
-    * and recalculates the reward rate.
-    * @dev Called by the PoolRewardDistributor contract once every 12 hours.
-    * @param rewardToken_ Address of one of the reward tokens.
-    * @param reward_ Reward amount.
+    * @notice Функция, реализующая логику уведомления стейкинг пула о пришедшей награде
+    * для одного из наградных токенов, а также пересчета скорости раздачи награды.
+    * @dev Функция может быть вызвана только контрактом PoolRewardDistributor раз в 12 часов.
+    * @param rewardToken_ Адрес одного из наградных токенов, для которого пришла награда.
+    * @param reward_ Размер награды.
     */
     function notifyRewardAmount(
         address rewardToken_,
@@ -206,31 +199,38 @@ abstract contract MultipleRewardPool is IMultipleRewardPool, ReentrancyGuard, Ow
         periodFinishPerToken[rewardToken_] = block.timestamp + rewardsDuration;
         emit RewardAdded(rewardToken_, reward_);
     }
+
+    /// @notice Функция, реализующая логику вывода количества стейкнутых пользователем токенов.
+    /// @param user_ Адрес пользователя.
+    function getBalance(address user_) external view virtual returns (uint256) {
+        return _balances[user_];
+    }
+
+    /// @notice Функция, реализующая логику вывода количества стейкнутых пользователями.
+    function getTotalSupply() external view virtual returns (uint256) {
+        return _totalSupply;
+    }
     
     /**
-    * @notice Retrieves an address of one of the reward tokens by index.
-    * @dev The read time complexity is O(1).
-    * @param index_ Index value.
-    * @return Address of one of the reward tokens.
+    * @notice Функция, реализующая логику получения адреса
+    * одного из существующих наградных токенов.
+    * @param index_ Индекс.
     */
     function getRewardToken(uint256 index_) external view returns (address) {
         return _rewardTokens.at(index_);
     }
     
-    /**
-    * @notice Retrieves the number of reward tokens.
-    * @dev Utilized with `getRewardToken()` function to retrieve all the addresses properly.
-    * @return Number of reward tokens.
-    */
+    /// @notice Функция, реализующая логику получения количества наградных токенов.
     function getRewardTokensCount() external view returns (uint256) {
         return _rewardTokens.length();
     }
     
     /**
-    * @notice Retrieves the total reward amount for duration in one of the reward tokens.
-    * @dev The function allows to get the amount of reward to be distributed in the current period.
-    * @param rewardToken_ Address of one of the reward tokens.
-    * @return Total reward amount for duration.
+    * @notice Функция, реализующая логику подсчета общей награды,
+    * которая заработается за `rewardsDuration` для одного из наградных токенов.
+    * @dev Скорость раздачи награды может поменяться спустя время,
+    * поэтому эта функция не претендует на точность.
+    * @param rewardToken_ Адрес одного из существующих наградных токенов.
     */
     function getRewardForDuration(
         address rewardToken_
@@ -242,15 +242,15 @@ abstract contract MultipleRewardPool is IMultipleRewardPool, ReentrancyGuard, Ow
     {
         return rewardRates[rewardToken_] * rewardsDuration;
     }
-
+    
     /**
-    * @notice Retrieves the potential reward amount in one
-    * of the reward tokens for duration.
-    * @dev Reward rate may change, so this function is not completely accurate.
-    * @param rewardToken_ Address of one of the reward tokens.
-    * @param user_ User address.
-    * @param duration_ Arbitrary time interval in seconds.
-    * @return Potential reward amount in one of the reward tokens for given duration.
+    * @notice Функция, реализующая логику подсчета награды пользователя,
+    * которая заработается за произвольный промежуток времени для одного из наградных токенов.
+    * @dev Скорость раздачи награды может поменяться спустя время,
+    * поэтому эта функция не претендует на точность.
+    * @param rewardToken_ Адрес одного из существующих наградных токенов.
+    * @param user_ Адрес пользователя.
+    * @param duration_ Произвольный промежуток времени в секундах.
     */
     function calculatePotentialReward(
         address rewardToken_,
@@ -259,33 +259,27 @@ abstract contract MultipleRewardPool is IMultipleRewardPool, ReentrancyGuard, Ow
     )
         external
         view
-        virtual
         onlyValidToken(rewardToken_)
         returns (uint256)
     {
         return
-            getBalance(user_)
+            _balances[user_]
             * (_rewardPerTokenForDuration(rewardToken_, duration_)
             - userRewardPerTokenPaid[rewardToken_][user_])
             / 1e18
             + rewards[user_][rewardToken_];
     }
-
+    
     /**
-    * @notice Withdraws the desired amount of deposited tokens for the user.
-    * @dev If 24 hours have not passed since the last deposit by the user, 
-    * a fee of 50% is charged from the withdrawn amount of deposited tokens
-    * and sent to the Seniorage contract, otherwise a 10% fee will be charged and sent 
-    * to the Seniorage contract as well. The withdrawn amount of tokens cannot
-    * exceed the amount of the deposit or be equal to 0.
-    * @param amount_ Desired amount of tokens to withdraw.
+    * @notice Функция, реализующая логику вывода из стейкинга
+    * произвольного количества токенов пользователем.
+    * @param amount_ Количество токенов для вывода.
     */
     function withdraw(
         uint256 amount_
     )
         public
         virtual
-        whenNotPaused
         nonReentrant
         updateReward(msg.sender)
     {
@@ -296,55 +290,35 @@ abstract contract MultipleRewardPool is IMultipleRewardPool, ReentrancyGuard, Ow
         _totalSupply -= amount_;
         _balances[msg.sender] -= amount_;
         uint256 seniorageFeeAmount;
-        if (block.timestamp < userLastDepositTime[msg.sender] + 1 days) {
+        if (block.timestamp <= userLastDepositTime[msg.sender] + 1 days) {
             seniorageFeeAmount = amount_ / 2;
+            IERC20(stakingToken).safeTransfer(seniorage, seniorageFeeAmount);
+            IERC20(stakingToken).safeTransfer(msg.sender, amount_ - seniorageFeeAmount);
         } else {
             seniorageFeeAmount = amount_ / 10;
+            IERC20(stakingToken).safeTransfer(seniorage, seniorageFeeAmount);
+            IERC20(stakingToken).safeTransfer(msg.sender, amount_ - seniorageFeeAmount);
         }
-        IERC20(stakingToken).safeTransfer(seniorage, seniorageFeeAmount);
-        IERC20(stakingToken).safeTransfer(msg.sender, amount_ - seniorageFeeAmount);
         emit Withdrawn(msg.sender, amount_ - seniorageFeeAmount);
     }
     
-    /**
-    * @notice Transfers rewards to the user.
-    * @dev There are no fees on the reward.
-    */
-    function getReward(
-    ) 
-        public 
-        virtual 
-        whenNotPaused
-        nonReentrant 
-        updateReward(msg.sender) 
-    {
-        _getReward();
+    /// @notice Функция, реализующая логику снятия заработанных пользователем наград.
+    function getReward() public virtual nonReentrant updateReward(msg.sender) {
+        for (uint256 i = 0; i < _rewardTokens.length(); i++) {
+            address rewardToken = _rewardTokens.at(i);
+            uint256 reward = rewards[msg.sender][rewardToken];
+            if (reward > 0) {
+                rewards[msg.sender][rewardToken] = 0;
+                IERC20(rewardToken).safeTransfer(msg.sender, reward);
+                emit RewardPaid(rewardToken, msg.sender, reward);
+            }
+        }
     }
 
     /**
-    * @notice Retrieves the user's deposit.
-    * @dev The function is virtual since the SnacksPool contract implements its own behaviour.
-    * @param user_ User address.
-    * @return Amount of the deposit.
-    */
-    function getBalance(address user_) public virtual view returns (uint256) {
-        return _balances[user_];
-    }
-
-    /**
-    * @notice Retrieves a total amount of deposited tokens.
-    * @dev The function is virtual since the SnacksPool contract implements its own behaviour.
-    * @return Total amount of deposited tokens.
-    */
-    function getTotalSupply() public view virtual returns (uint256) {
-        return _totalSupply;
-    }
-
-    /**
-    * @notice Retrieves the time a reward was applicable for one of the reward tokens.
-    * @dev Allows the contract to correctly calculate rewards earned by users.
-    * @param rewardToken_ Address of one of the reward tokens.
-    * @return Last time reward was applicable for one of the reward tokens.
+    * @notice Функция, реализующая логику корректного вычисления разницы во времени
+    * между последним обновлением `lastUpdateTimePerToken` и `periodFinishPerToken`.
+    * @param rewardToken_ Адрес одного из существующих наградных токенов.
     */
     function lastTimeRewardApplicable(
         address rewardToken_
@@ -361,11 +335,9 @@ abstract contract MultipleRewardPool is IMultipleRewardPool, ReentrancyGuard, Ow
     }
     
     /**
-    * @notice Retrieves the amount of reward per token 
-    * staked in one of the reward tokens.
-    * @dev The logic is derived from the StakingRewards contract.
-    * @param rewardToken_ Address of one of the reward tokens.
-    * @return Amount of reward per token staked in one of the reward tokens.
+    * @notice Функция, реализующая логику вычисления количества награды
+    * для одного из наградных токенов за один стейкнутый токен.
+    * @param rewardToken_ Адрес одного из существующих наградных токенов.
     */
     function rewardPerToken(
         address rewardToken_
@@ -375,25 +347,22 @@ abstract contract MultipleRewardPool is IMultipleRewardPool, ReentrancyGuard, Ow
         onlyValidToken(rewardToken_)
         returns (uint256)
     {
-        uint256 totalSupply = getTotalSupply();
-        if (totalSupply == 0) {
+        if (_totalSupply == 0) {
             return rewardPerTokenStored[rewardToken_];
         }
         return
             (lastTimeRewardApplicable(rewardToken_) - lastUpdateTimePerToken[rewardToken_])
             * rewardRates[rewardToken_]
             * 1e18
-            / totalSupply
+            / _totalSupply
             + rewardPerTokenStored[rewardToken_];
     }
     
     /**
-    * @notice Retrieves the amount of rewards earned 
-    * by the user in one of the reward tokens.
-    * @dev The logic is derived from the StakingRewards contract.
-    * @param user_ User address.
-    * @param rewardToken_ Address of one of the reward tokens.
-    * @return Amount of rewards earned by the user in one of the reward tokens.
+    * @notice Функция, реализующая логику вычисления количества
+    * заработанной пользователем награды для одного из наградных токенов.
+    * @param user_ Адрес пользователя.
+    * @param rewardToken_ Адрес одного из существующих наградных токенов.
     */
     function earned(
         address user_,
@@ -406,36 +375,27 @@ abstract contract MultipleRewardPool is IMultipleRewardPool, ReentrancyGuard, Ow
         returns (uint256)
     {
         return
-            getBalance(user_)
+            _balances[user_]
             * (rewardPerToken(rewardToken_) - userRewardPerTokenPaid[rewardToken_][user_])
             / 1e18
             + rewards[user_][rewardToken_];
     }
-
-    /**
-    * @notice Transfers rewards to the user.
-    * @dev This functional was isolated due to internal usage (to avoid `nonReentrant` modifier functionality).
-    */ 
-    function _getReward() internal {
+    
+    /// @notice Функция, реализующая логику обновления всех заработанных пользователем наград.
+    /// @param user_ Адрес пользователя.
+    function _updateAllRewards(address user_) private {
         for (uint256 i = 0; i < _rewardTokens.length(); i++) {
-            address rewardToken = _rewardTokens.at(i);
-            uint256 reward = rewards[msg.sender][rewardToken];
-            if (reward > 0) {
-                rewards[msg.sender][rewardToken] = 0;
-                IERC20(rewardToken).safeTransfer(msg.sender, reward);
-                emit RewardPaid(rewardToken, msg.sender, reward);
-            }
+            _updateReward(_rewardTokens.at(i), user_);
         }
     }
-
+    
     /**
-    * @notice Updates the reward earned by the user in one of the reward tokens.
-    * @dev Called inside `updateRewardPerToken` modifier and `_updateAllRewards()` function.
-    * It serves both purpose: gas savings and readability.
-    * @param rewardToken_ Address of one of the reward tokens.
-    * @param user_ User address.
+    * @notice Функция, реализующая логику обновления заработанной пользователем награды
+    * для одного из наградных токенов.
+    * @param rewardToken_ Адрес одного из существующих наградных токенов.
+    * @param user_ Адрес пользователя.
     */
-    function _updateReward(address rewardToken_, address user_) internal virtual {
+    function _updateReward(address rewardToken_, address user_) private {
         rewardPerTokenStored[rewardToken_] = rewardPerToken(rewardToken_);
         lastUpdateTimePerToken[rewardToken_] = lastTimeRewardApplicable(rewardToken_);
         if (user_ != address(0)) {
@@ -443,43 +403,31 @@ abstract contract MultipleRewardPool is IMultipleRewardPool, ReentrancyGuard, Ow
             userRewardPerTokenPaid[rewardToken_][user_] = rewardPerTokenStored[rewardToken_];
         }
     }
-
-     /**
-    * @notice Retrieves the amount of reward per token staked 
-    * in one of the reward tokens.
-    * @dev Called inside `calculatePotentialReward()` function.
-    * @param rewardToken_ Address of one of the reward tokens.
-    * @param duration_ Arbitrary time interval in seconds.
-    * @return Amount of reward per token staked in one of the reward tokens.
+    
+    /**
+    * @notice Функция, реализующая логику функции {rewardPerToken}
+    * за произвольный промежуток времени.
+    * @dev Функция используется только для вычисления потенциальной награды пользователя
+    * в одном из наградных токенов за произвольный промежуток времени.
+    * @param rewardToken_ Адрес одного из существующих наградных токенов.
+    * @param duration_ Произвольный промежуток времени в секундах.
     */
     function _rewardPerTokenForDuration(
         address rewardToken_,
         uint256 duration_
     )
-        internal
+        private
         view
         returns (uint256)
     {
-        uint256 totalSupply = getTotalSupply();
-        if (totalSupply == 0) {
+        if (_totalSupply == 0) {
             return rewardPerTokenStored[rewardToken_];
         }
         return
             duration_
             * rewardRates[rewardToken_]
             * 1e18
-            / totalSupply
+            / _totalSupply
             + rewardPerTokenStored[rewardToken_];
-    }
-    
-    /**
-    * @notice Updates all rewards earned by the user.
-    * @dev Called when the user deposits, exits, withdraws or gets his rewards.
-    * @param user_ User address.
-    */
-    function _updateAllRewards(address user_) private {
-        for (uint256 i = 0; i < _rewardTokens.length(); i++) {
-            _updateReward(_rewardTokens.at(i), user_);
-        }
     }
 }

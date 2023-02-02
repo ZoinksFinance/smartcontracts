@@ -2,26 +2,29 @@
 pragma solidity 0.8.15;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-
 import "./interfaces/IMultipleRewardPool.sol";
 import "./interfaces/ISingleRewardPool.sol";
 
-contract PoolRewardDistributor is Ownable, Pausable {
+/**
+* @title Контракт, распределяющий награду на стейкинг пулы раз в 12 часов и уведомляющий их.
+* @notice На этот контракт приходят часть от всех комиссий со SNACKS, BTCSNACKS и ETHSNACKS токенов,
+* а также часть от инфляционной эмиссии ZOINKS токенов и BUSD токены.
+*/
+contract PoolRewardDistributor is Ownable {
     using SafeERC20 for IERC20;
     
-    uint256 private constant BASE_PERCENT = 10000;
-    uint256 private constant SENIORAGE_FEE_PERCENT = 1000;
-    uint256 private constant ZOINKS_APE_SWAP_POOL_PERCENT = 2308;
-    uint256 private constant ZOINKS_BI_SWAP_POOL_PERCENT = 2308;
-    uint256 private constant ZOINKS_PANCAKE_SWAP_POOL_PERCENT = 5384;
-    uint256 private constant SNACKS_PANCAKE_SWAP_POOL_PERCENT = 6667;
-    uint256 private constant SNACKS_SNACKS_POOL_PERCENT = 3333;
-    uint256 private constant BTC_SNACKS_PANCAKE_SWAP_POOL_PERCENT = 5714;
-    uint256 private constant BTC_SNACKS_SNACKS_POOL_PERCENT = 4286;
-    uint256 private constant ETH_SNACKS_PANCAKE_SWAP_POOL_PERCENT = 5714;
-    uint256 private constant ETH_SNACKS_SNACKS_POOL_PERCENT = 4286;
+    uint256 constant private BASE_PERCENT = 10000;
+    uint256 constant private SENIORAGE_FEE_PERCENT = 1000;
+    uint256 constant private ZOINKS_APE_SWAP_POOL_PERCENT = 2308;
+    uint256 constant private ZOINKS_BI_SWAP_POOL_PERCENT = 2308;
+    uint256 constant private ZOINKS_PANCAKE_SWAP_POOL_PERCENT = 5384;
+    uint256 constant private SNACKS_PANCAKE_SWAP_POOL_PERCENT = 6667;
+    uint256 constant private SNACKS_SNACKS_POOL_PERCENT = 3333;
+    uint256 constant private BTC_SNACKS_PANCAKE_SWAP_POOL_PERCENT = 5714;
+    uint256 constant private BTC_SNACKS_SNACKS_POOL_PERCENT = 4286;
+    uint256 constant private ETH_SNACKS_PANCAKE_SWAP_POOL_PERCENT = 5714;
+    uint256 constant private ETH_SNACKS_SNACKS_POOL_PERCENT = 4286;
     
     address public busd;
     address public zoinks;
@@ -45,20 +48,21 @@ contract PoolRewardDistributor is Ownable, Pausable {
     }
     
     /**
-    * @notice Configures the contract.
-    * @dev Could be called by the owner in case of resetting addresses.
-    * @param busd_ Binance-Peg BUSD token address.
-    * @param zoinks_ Zoinks token address.
-    * @param snacks_ Snacks token address.
-    * @param btcSnacks_ BtcSnacks token address.
-    * @param ethSnacks_ EthSnacks token address.
-    * @param apeSwapPool_ ApeSwapPool contract address.
-    * @param biSwapPool_ BiSwapPool contract address.
-    * @param pancakeSwapPool_ PancakeSwapPool contract address.
-    * @param snacksPool_ SnacksPool contract address.
-    * @param lunchBox_ LunchBox contract address.
-    * @param seniorage_ Seniorage contract address.
-    * @param authority_ Authorised address.
+    * @notice Функция, реализующая логику установки адресов или их переустановки в случае редеплоя контрактов.
+    * @dev Если редеплоится какой-то один контракт, то на место тех адресов,
+    * которые не редеплоились, передаются старые значения.
+    * @param busd_ Адрес BUSD токена.
+    * @param zoinks_ Адрес ZOINKS токена.
+    * @param snacks_ Адрес SNACKS токена.
+    * @param btcSnacks_ Адрес BTCSNACKS токена.
+    * @param ethSnacks_ Адрес ETHSNACKS токена.
+    * @param apeSwapPool_ Адрес контракта ApeSwapPool.
+    * @param biSwapPool_ Адрес контракта BiSwapPool.
+    * @param pancakeSwapPool_ Адрес контракта PancakeSwapPool.
+    * @param snacksPool_ Адрес контракта SnacksPool.
+    * @param lunchBox_ Адрес контракта LunchBox.
+    * @param seniorage_ Адрес контракта Seniorage.
+    * @param authority_ Адрес EOA, имеющего доступ к вызову функции {distributeRewards}.
     */
     function configure(
         address busd_,
@@ -90,106 +94,72 @@ contract PoolRewardDistributor is Ownable, Pausable {
         seniorage = seniorage_;
         authority = authority_;
     }
-
-    /**
-    * @notice Triggers stopped state.
-    * @dev Could be called by the owner in case of resetting addresses.
-    */
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    /**
-    * @notice Returns to normal state.
-    * @dev Could be called by the owner in case of resetting addresses.
-    */
-    function unpause() external onlyOwner {
-        _unpause();
-    }
     
     /**
-    * @notice Distributes rewards on pools and notifies them.
-    * @dev Called by the authorised address once every 12 hours.
+    * @notice Функция, реализующая логику респределения наград на стейкинг пулы
+    * и уведомляющая их.
+    * @dev Функция может быть вызвана только authority адресом. Вызывается раз в 12 часов.
     */
-    function distributeRewards() external whenNotPaused onlyAuthority {
+    function distributeRewards() external onlyAuthority {
         uint256 reward;
         uint256 seniorageFeeAmount;
         uint256 distributionAmount;
         uint256 zoinksBalance = IERC20(zoinks).balanceOf(address(this));
         if (zoinksBalance != 0) {
-            address zoinksAddress = zoinks;
-            // 10% of the balance goes to the Seniorage contract.
             seniorageFeeAmount = zoinksBalance * SENIORAGE_FEE_PERCENT / BASE_PERCENT;
-            IERC20(zoinksAddress).safeTransfer(seniorage, seniorageFeeAmount);
+            IERC20(zoinks).safeTransfer(seniorage, seniorageFeeAmount);
             distributionAmount = zoinksBalance - seniorageFeeAmount;
-            // 23.08% of the distribution amount goes to the ApeSwapPool contract.
             reward = distributionAmount * ZOINKS_APE_SWAP_POOL_PERCENT / BASE_PERCENT;
-            IERC20(zoinksAddress).safeTransfer(apeSwapPool, reward);
+            IERC20(zoinks).safeTransfer(apeSwapPool, reward);
             ISingleRewardPool(apeSwapPool).notifyRewardAmount(reward);
-            // 23.08% of the distribution amount goes to the BiSwapPool contract.
             reward = distributionAmount * ZOINKS_BI_SWAP_POOL_PERCENT / BASE_PERCENT;
-            IERC20(zoinksAddress).safeTransfer(biSwapPool, reward);
+            IERC20(zoinks).safeTransfer(biSwapPool, reward);
             ISingleRewardPool(biSwapPool).notifyRewardAmount(reward);
-            // 53.84% of the distribution amount goes to the PancakeSwapPool contract.
             reward = distributionAmount * ZOINKS_PANCAKE_SWAP_POOL_PERCENT / BASE_PERCENT;
-            IERC20(zoinksAddress).safeTransfer(pancakeSwapPool, reward);
-            IMultipleRewardPool(pancakeSwapPool).notifyRewardAmount(zoinksAddress, reward);
+            IERC20(zoinks).safeTransfer(pancakeSwapPool, reward);
+            IMultipleRewardPool(pancakeSwapPool).notifyRewardAmount(zoinks, reward);
         }
         uint256 snacksBalance = IERC20(snacks).balanceOf(address(this));
         if (snacksBalance != 0) {
-            address snacksAddress = snacks;
-            // 10% of the balance goes to the Seniorage contract.
             seniorageFeeAmount = snacksBalance * SENIORAGE_FEE_PERCENT / BASE_PERCENT;
-            IERC20(snacksAddress).safeTransfer(seniorage, seniorageFeeAmount);
+            IERC20(snacks).safeTransfer(seniorage, seniorageFeeAmount);
             distributionAmount = snacksBalance - seniorageFeeAmount;
-            // 66.67% of the distribution amount goes to the PancakeSwapPool contract.
             reward = distributionAmount * SNACKS_PANCAKE_SWAP_POOL_PERCENT / BASE_PERCENT;
-            IERC20(snacksAddress).safeTransfer(pancakeSwapPool, reward);
-            IMultipleRewardPool(pancakeSwapPool).notifyRewardAmount(snacksAddress, reward);
-            // 33.33% of the distribution amount goes to the SnacksPool contract.
+            IERC20(snacks).safeTransfer(pancakeSwapPool, reward);
+            IMultipleRewardPool(pancakeSwapPool).notifyRewardAmount(snacks, reward);
             reward = distributionAmount * SNACKS_SNACKS_POOL_PERCENT / BASE_PERCENT;
-            IERC20(snacksAddress).safeTransfer(snacksPool, reward);
-            IMultipleRewardPool(snacksPool).notifyRewardAmount(snacksAddress, reward);
+            IERC20(snacks).safeTransfer(snacksPool, reward);
+            IMultipleRewardPool(snacksPool).notifyRewardAmount(snacks, reward);
         }
         uint256 btcSnacksBalance = IERC20(btcSnacks).balanceOf(address(this));
         if (btcSnacksBalance != 0) {
-            address btcSnacksAddress = btcSnacks;
-            // 10% of the balance goes to the Seniorage contract.
             seniorageFeeAmount = btcSnacksBalance * SENIORAGE_FEE_PERCENT / BASE_PERCENT;
-            IERC20(btcSnacksAddress).safeTransfer(seniorage, seniorageFeeAmount);
+            IERC20(btcSnacks).safeTransfer(seniorage, seniorageFeeAmount);
             distributionAmount = btcSnacksBalance - seniorageFeeAmount;
-            // 57.14% of the distribution amount goes to the PancakeSwapPool contract.
             reward = distributionAmount * BTC_SNACKS_PANCAKE_SWAP_POOL_PERCENT / BASE_PERCENT;
-            IERC20(btcSnacksAddress).safeTransfer(pancakeSwapPool, reward);
-            IMultipleRewardPool(pancakeSwapPool).notifyRewardAmount(btcSnacksAddress, reward);
-            // 42.86% of the distribution amount goes to the SnacksPool contract.
+            IERC20(btcSnacks).safeTransfer(pancakeSwapPool, reward);
+            IMultipleRewardPool(pancakeSwapPool).notifyRewardAmount(btcSnacks, reward);
             reward = distributionAmount * BTC_SNACKS_SNACKS_POOL_PERCENT / BASE_PERCENT;
-            IERC20(btcSnacksAddress).safeTransfer(snacksPool, reward);
-            IMultipleRewardPool(snacksPool).notifyRewardAmount(btcSnacksAddress, reward);
+            IERC20(btcSnacks).safeTransfer(snacksPool, reward);
+            IMultipleRewardPool(snacksPool).notifyRewardAmount(btcSnacks, reward);
         }
         uint256 ethSnacksBalance = IERC20(ethSnacks).balanceOf(address(this));
         if (ethSnacksBalance != 0) {
-            address ethSnacksAddress = ethSnacks;
-            // 10% of the balance goes to the Seniorage contract.
             seniorageFeeAmount = ethSnacksBalance * SENIORAGE_FEE_PERCENT / BASE_PERCENT;
-            IERC20(ethSnacksAddress).safeTransfer(seniorage, seniorageFeeAmount);
+            IERC20(ethSnacks).safeTransfer(seniorage, seniorageFeeAmount);
             distributionAmount = ethSnacksBalance - seniorageFeeAmount;
-            // 57.14% of the distribution amount goes to the PancakeSwapPool contract.
             reward = distributionAmount * ETH_SNACKS_PANCAKE_SWAP_POOL_PERCENT / BASE_PERCENT;
-            IERC20(ethSnacksAddress).safeTransfer(pancakeSwapPool, reward);
-            IMultipleRewardPool(pancakeSwapPool).notifyRewardAmount(ethSnacksAddress, reward);
-            // 42.86% of the distribution amount goes to the SnacksPool contract.
+            IERC20(ethSnacks).safeTransfer(pancakeSwapPool, reward);
+            IMultipleRewardPool(pancakeSwapPool).notifyRewardAmount(ethSnacks, reward);
             reward = distributionAmount * ETH_SNACKS_SNACKS_POOL_PERCENT / BASE_PERCENT;
-            IERC20(ethSnacksAddress).safeTransfer(snacksPool, reward);
-            IMultipleRewardPool(snacksPool).notifyRewardAmount(ethSnacksAddress, reward);
+            IERC20(ethSnacks).safeTransfer(snacksPool, reward);
+            IMultipleRewardPool(snacksPool).notifyRewardAmount(ethSnacks, reward);
         }
         uint256 busdBalance = IERC20(busd).balanceOf(address(this));
         if (busdBalance != 0) {
-            // 10% of the balance goes to the Seniorage contract.
             seniorageFeeAmount = busdBalance * SENIORAGE_FEE_PERCENT / BASE_PERCENT;
             IERC20(busd).safeTransfer(seniorage, seniorageFeeAmount);
             distributionAmount = busdBalance - seniorageFeeAmount;
-            // 100% of the distribution amount goes to the LunchBox contract.
             IERC20(busd).safeTransfer(lunchBox, distributionAmount);
             ISingleRewardPool(lunchBox).notifyRewardAmount(distributionAmount);
         }

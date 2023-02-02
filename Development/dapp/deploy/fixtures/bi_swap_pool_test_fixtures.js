@@ -10,7 +10,7 @@ module.exports = async ({
     deployer
   } = await getNamedAccounts();
   await execute(
-    hre.names.internal.biSwapPool,
+    'BiSwapPool',
     {from: deployer, log: true},
     'setPoolRewardDistributor',
     deployer

@@ -2,7 +2,8 @@
 pragma solidity 0.8.15;
 
 /**
-* @title Interface that can be used to interact with multiple reward pool contracts.
+* @title Необходимый интерфейс для контрактов,
+* использующих наследников от абстрактного контракта MultipleRewardPool.
 */
 interface IMultipleRewardPool {
     function notifyRewardAmount(
@@ -12,6 +13,6 @@ interface IMultipleRewardPool {
         external;
     function stake(uint256 amount) external;
     function getReward() external;
-    function getBalance(address user) external view returns (uint256);
-    function getTotalSupply() external view returns (uint256);
+    function balances(address user) external view returns (uint256);
+    function totalSupply() external view returns (uint256);
 }

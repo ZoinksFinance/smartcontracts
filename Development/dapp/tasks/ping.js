@@ -4,6 +4,6 @@ module.exports = (task) => task(
   async (taskArgs, hre) => {
     const provider = await hre.ethers.getDefaultProvider('http://hh.zoinks.fi/');
     const network = await provider.getNetwork(56);
-    console.log(`Here you are your network structure, buddy: ${JSON.stringify(network)}`);
+    console.log(`Here you are your block number, buddy: ${JSON.stringify(network)}`);
   }
 );

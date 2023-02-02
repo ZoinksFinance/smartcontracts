@@ -2,24 +2,24 @@
 pragma solidity 0.8.15;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./interfaces/IMultipleRewardPool.sol";
 import "./interfaces/ISnacksBase.sol";
 import "./interfaces/IRouter.sol";
 
-contract Pulse is Ownable, Pausable {
+/// @title Контракт, поддерживающий работу системы.
+contract Pulse is Ownable {
     using SafeERC20 for IERC20;
 
-    uint256 private constant BASE_PERCENT = 10000;
-    uint256 private constant BTC_SNACKS_SENIORAGE_PERCENT = 5000;
-    uint256 private constant ETH_SNACKS_SENIORAGE_PERCENT = 5000;
-    uint256 private constant SNACKS_DISTRIBUTION_PERCENT = 1000;
-    uint256 private constant ZOINKS_DISTRIBUTION_PERCENT = 1000;
+    uint256 constant private BASE_PERCENT = 10000;
+    uint256 constant private BTC_SNACKS_SENIORAGE_PERCENT = 5000;
+    uint256 constant private ETH_SNACKS_SENIORAGE_PERCENT = 5000;
+    uint256 constant private SNACKS_DISTRIBUTION_PERCENT = 1000;
+    uint256 constant private ZOINKS_DISTRIBUTION_PERCENT = 1000;
 
-    address public immutable busd;
-    address public immutable router;
+    address public busd;
     address public cakeLP;
     address public zoinks;
     address public snacks;
@@ -27,6 +27,7 @@ contract Pulse is Ownable, Pausable {
     address public ethSnacks;
     address public pancakeSwapPool;
     address public snacksPool;
+    address public router;
     address public seniorage;
     address public authority;
 
@@ -38,10 +39,8 @@ contract Pulse is Ownable, Pausable {
         _;
     }
     
-    /**
-    * @param busd_ Binance-Peg BUSD token address.
-    * @param router_ Router contract address (from PancakeSwap DEX).
-    */
+    /// @param busd_ Адрес BUSD токена.
+    /// @param router_ Адрес PancakeSwap роутера.
     constructor(
         address busd_,
         address router_
@@ -52,17 +51,19 @@ contract Pulse is Ownable, Pausable {
     }
     
     /**
-    * @notice Configures the contract.
-    * @dev Could be called by the owner in case of resetting addresses.
-    * @param cakeLP_ Pancake LPs token address.
-    * @param zoinks_ Zoinks token address.
-    * @param snacks_ Snacks token address.
-    * @param btcSnacks_ BtcSnacks token address.
-    * @param ethSnacks_ EthSnacks token address.
-    * @param pancakeSwapPool_ PancakeSwapPool contract address.
-    * @param snacksPool_ SnacksPool contract address.
-    * @param seniorage_ Seniorage contract address.
-    * @param authority_ Authorised address.
+    * @notice Функция, реализующая логику установки адресов или их переустановки
+    * в случае редеплоя контрактов.
+    * @dev Если редеплоится какой-то один контракт, то на место тех адресов,
+    * которые не редеплоились, передаются старые значения.
+    * @param cakeLP_ Адрес Cake-LP токена (контракта пары).
+    * @param zoinks_ Адрес ZOINKS токена.
+    * @param snacks_ Адрес SNACKS токена.
+    * @param btcSnacks_ Адрес BTCSNACKS токена.
+    * @param ethSnacks_ Адрес ETHSNACKS токена.
+    * @param pancakeSwapPool_ Адрес контракта PancakeSwapPool.
+    * @param snacksPool_ Адрес контракта SnacksPool.
+    * @param seniorage_ Адрес контракта Seniorage.
+    * @param authority_ Адрес EOA, имеющего доступ к вызову функций контракта.
     */
     function configure(
         address cakeLP_,
@@ -102,26 +103,11 @@ contract Pulse is Ownable, Pausable {
     }
 
     /**
-    * @notice Triggers stopped state.
-    * @dev Could be called by the owner in case of resetting addresses.
+    * @notice Функция, реализующая логику респределения на контракт Seniorage 50% от общего баланса
+    * BTCSNACKS и ETHSNACKS токенов на контракте Pulse.
+    * @dev Функция может быть вызвана только authority адресом. Вызывается раз в 12 часов.
     */
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    /**
-    * @notice Returns to normal state.
-    * @dev Could be called by the owner in case of resetting addresses.
-    */
-    function unpause() external onlyOwner {
-        _unpause();
-    }
-
-    /**
-    * @notice Distributes BtcSnacks and EthSnacks tokens.
-    * @dev Called by the authorised address once every 12 hours.
-    */
-    function distributeBtcSnacksAndEthSnacks() external whenNotPaused onlyAuthority {
+    function distributeBtcSnacksAndEthSnacks() external onlyAuthority {
         uint256 btcSnacksBalance = IERC20(btcSnacks).balanceOf(address(this));
         uint256 ethSnacksBalance = IERC20(ethSnacks).balanceOf(address(this));
         if (btcSnacksBalance != 0) {
@@ -139,44 +125,81 @@ contract Pulse is Ownable, Pausable {
     }
 
     /**
-    * @notice Distributes Snacks tokens.
-    * @dev Called by the authorised address once every 12 hours.
+    * @notice Функция, реализующая логику респределения 20% от общего баланса
+    * SNACKS токенов на контракте Pulse.
+    * @dev Функция может быть вызвана только authority адресом. Вызывается раз в 12 часов.
     */
-    function distributeSnacks() external whenNotPaused onlyAuthority {
+    function distributeSnacks() external onlyAuthority {
         uint256 balance = IERC20(snacks).balanceOf(address(this));
         if (balance != 0) {
             uint256 amountToDistribute = balance * SNACKS_DISTRIBUTION_PERCENT / BASE_PERCENT;
+            // Redeem 10% от общего баланса SNACKS токенов
             if (ISnacksBase(snacks).sufficientBuyTokenAmountOnRedeem(amountToDistribute)) {
-                // Return value is ignored.
                 ISnacksBase(snacks).redeem(amountToDistribute);
             }
+            // Deposit 10% от общего баланса SNACKS токенов в SnacksPool
             IMultipleRewardPool(snacksPool).stake(amountToDistribute);
         }
     }
 
     /**
-    * @notice Distributes Zoinks and Pancake LPs tokens.
-    * @dev Called by the authorised address once every 12 hours.
+    * @notice Функция, реализующая логику респределения 20% от общего баланса
+    * ZOINKS токенов на контракте Pulse.
+    * @dev Функция может быть вызвана только authority адресом. Вызывается раз в 12 часов.
+    * @param busdAmountOutMin_ Минимальное ожидаемое количество BUSD
+    * токенов к получению после обмена 5% от общего баланса ZOINKS токенов.
+    * @param addLiquidityZoinksAmountMin_ Минимальное ожидаемое количество ZOINKS
+    * токенов ко внесению ликвидности 5% от общего баланса ZOINKS токенов.
+    * @param addLiquidityBusdAmountMin_ Минимальное ожидаемое количество BUSD
+    * токенов ко внесению ликвидности BUSD токенов в количестве, полученном
+    * после обмена 5% от общего баланса ZOINKS токенов.
     */
-    function distributeZoinks() external whenNotPaused onlyAuthority {
-        uint256 zoinksBalance = IERC20(zoinks).balanceOf(address(this));
-        if (zoinksBalance != 0) {
-            uint256 amountToDistribute = zoinksBalance * ZOINKS_DISTRIBUTION_PERCENT / BASE_PERCENT;
+    function distrubuteZoinks(
+        uint256 busdAmountOutMin_,
+        uint256 addLiquidityZoinksAmountMin_,
+        uint256 addLiquidityBusdAmountMin_
+    )
+        external
+        onlyAuthority
+    {
+        uint256 balance = IERC20(zoinks).balanceOf(address(this));
+        if (balance != 0) {
+            uint256 amountToDistribute = balance * ZOINKS_DISTRIBUTION_PERCENT / BASE_PERCENT;
+            // Покупка SNACKS токенов на 10% от общего баланса ZOINKS токенов
             if (ISnacksBase(snacks).sufficientPayTokenAmountOnMint(amountToDistribute)) {
                 ISnacksBase(snacks).mintWithPayTokenAmount(amountToDistribute);
             }
-        }
-        uint256 cakeLPBalance = IERC20(cakeLP).balanceOf(address(this));
-        if (cakeLPBalance != 0) {
-            IMultipleRewardPool(pancakeSwapPool).stake(cakeLPBalance);
+            // Обмен 5% от общего баланса ZOINKS токенов на BUSD токены
+            uint256 amountOfZoinksToSwapOnBusd = amountToDistribute / 2;
+            address[] memory path = new address[](2);
+            path[0] = zoinks;
+            path[1] = busd;
+            uint256[] memory amounts = IRouter(router).swapExactTokensForTokens(
+                amountOfZoinksToSwapOnBusd,
+                busdAmountOutMin_,
+                path,
+                address(this),
+                block.timestamp + 15
+            );
+            // Добавление ликвидности в размере полученных BUSD токенов после обмена
+            (, , uint256 liquidity) = IRouter(router).addLiquidity(
+                zoinks,
+                busd,
+                amountOfZoinksToSwapOnBusd,
+                amounts[1],
+                addLiquidityZoinksAmountMin_,
+                addLiquidityBusdAmountMin_,
+                address(this),
+                block.timestamp + 15
+            );
+            // Стейк в PancakeSwapPool полученное количество Cake-LP токенов
+            IMultipleRewardPool(pancakeSwapPool).stake(liquidity);
         }
     }
 
-    /**
-    * @notice Claims rewards from the PancakeSwapPool and SnacksPool.
-    * @dev Called by the authorised address once every 12 hours.
-    */
-    function harvest() external whenNotPaused onlyAuthority {
+    /// @notice Функция, реализующая логику снятия наград со стейкинг пулов.
+    /// @dev Функция может быть вызвана только authority адресом. Вызывается раз в 12 часов.
+    function harvest() external onlyAuthority {
         IMultipleRewardPool(pancakeSwapPool).getReward();
         IMultipleRewardPool(snacksPool).getReward();
     }

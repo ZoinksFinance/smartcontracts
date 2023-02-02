@@ -1,5 +1,4 @@
-const hre = require("hardhat");
-const { ethers, deployments } = hre;
+const { ethers, deployments } = require("hardhat");
 const singleRewardPoolTestSuite = require('../reusable_test_suits/single_reward_pool_test_suite');
 
 describe("BiSwapPool", () => {
@@ -16,14 +15,14 @@ describe("BiSwapPool", () => {
     },
     async () => {
       return await ethers.getContractAt(
-        hre.names.internal.biSwapPool,
-        (await deployments.get(hre.names.internal.biSwapPool)).address
+        "BiSwapPool",
+        (await deployments.get("BiSwapPool")).address
       );
     },
     async () => {
       return await ethers.getContractAt(
-        hre.names.internal.mockToken,
-        (await deployments.get(hre.names.external.pairs.bi.lp)).address
+        "MockToken",
+        (await deployments.get("BiPairLP")).address
       );
     },
     rewardsDuration

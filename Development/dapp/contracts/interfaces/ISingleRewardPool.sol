@@ -2,7 +2,8 @@
 pragma solidity 0.8.15;
 
 /**
-* @title Interface that can be used to interact with single reward pool contracts.
+* @title Необходимый интерфейс для контрактов,
+* использующих наследников от абстрактного контракта SingleRewardPool.
 */
 interface ISingleRewardPool {
     function notifyRewardAmount(uint256 reward) external;

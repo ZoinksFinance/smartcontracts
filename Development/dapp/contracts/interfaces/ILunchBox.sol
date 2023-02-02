@@ -1,33 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.15;
 
-/**
-* @title Interface that can be used to interact with the LunchBox contract.
-*/
+/// @title Необходимый интерфейс для контрактов, использующих контракт LunchBox.
 interface ILunchBox {
-    function stakeForSeniorage(uint256 busdAmount) external;
-    function stakeForSeniorage(
+    function stake(uint256 busdAmount) external;
+    function stake(
         uint256 zoinksAmount,
         uint256 btcAmount,
         uint256 ethAmount,
         uint256 snacksAmount,
         uint256 btcSnacksAmount,
-        uint256 ethSnacksAmount,
-        uint256 zoinksBusdAmountOutMin,
-        uint256 btcBusdAmountOutMin,
-        uint256 ethBusdAmountOutMin
+        uint256 ethSnacksAmount
     )
         external;
-    function stakeForSnacksPool(
+    function stake(
+        address user,
         uint256 snacksAmount,
         uint256 btcSnacksAmount,
-        uint256 ethSnacksAmount,
-        uint256 zoinksBusdAmountOutMin,
-        uint256 btcBusdAmountOutMin,
-        uint256 ethBusdAmountOutMin
+        uint256 ethSnacksAmount
     )
         external;
-    function updateRewardForUser(address user) external;
-    function updateTotalSupplyFactor(uint256 totalSupplyBefore) external;
     function getReward(address user) external;
+    function exit(address user) external;
 }
