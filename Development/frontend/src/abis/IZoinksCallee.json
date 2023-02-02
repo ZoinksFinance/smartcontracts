@@ -1,0 +1,241 @@
+{
+  "contractName": "IZoinksCallee",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "sender",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amount0",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amount1",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bytes",
+          "name": "data",
+          "type": "bytes"
+        }
+      ],
+      "name": "ZoinksCall",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "metadata": "{\"compiler\":{\"version\":\"0.8.15+commit.e14f2714\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount0\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"amount1\",\"type\":\"uint256\"},{\"internalType\":\"bytes\",\"name\":\"data\",\"type\":\"bytes\"}],\"name\":\"ZoinksCall\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"kind\":\"dev\",\"methods\":{},\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{},\"version\":1}},\"settings\":{\"compilationTarget\":{\"project:/src/contracts/interfaces/IZoinksCallee.sol\":\"IZoinksCallee\"},\"evmVersion\":\"london\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\"},\"optimizer\":{\"enabled\":true,\"runs\":0},\"remappings\":[]},\"sources\":{\"project:/src/contracts/interfaces/IZoinksCallee.sol\":{\"keccak256\":\"0xfdb3aef64284fe92ce2471477f26ee4169ab3a8db76c28bb2ad9bd669958fd29\",\"license\":\"UNLICENSED\",\"urls\":[\"bzz-raw://a0030e9f89e468443cc2aaa9bebfaba05ea6b6d850b260f6327edf96b94422ab\",\"dweb:/ipfs/QmVYzgSiMJyGwRWqK3CVSGjWHvXdQ7MdPtMaHJX9PLgFjk\"]}},\"version\":1}",
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "immutableReferences": {},
+  "generatedSources": [],
+  "deployedGeneratedSources": [],
+  "sourceMap": "",
+  "deployedSourceMap": "",
+  "source": "/************************************************************\r\n *\r\n * Autor: Zoinks\r\n *\r\n * 446576656c6f7065723a20416e746f6e20506f6c656e79616b61 ****/\r\n\r\n// SPDX-License-Identifier: UNLICENSED\r\npragma solidity 0.8.15;\r\n\r\ninterface IZoinksCallee {\r\n    function ZoinksCall(\r\n        address sender,\r\n        uint256 amount0,\r\n        uint256 amount1,\r\n        bytes calldata data\r\n    ) external;\r\n}\r\n",
+  "sourcePath": "C:\\GitHub\\zoinks\\contracts\\Development\\src\\contracts\\interfaces\\IZoinksCallee.sol",
+  "ast": {
+    "absolutePath": "project:/src/contracts/interfaces/IZoinksCallee.sol",
+    "exportedSymbols": {
+      "IZoinksCallee": [
+        24577
+      ]
+    },
+    "id": 24578,
+    "license": "UNLICENSED",
+    "nodeType": "SourceUnit",
+    "nodes": [
+      {
+        "id": 24565,
+        "literals": [
+          "solidity",
+          "0.8",
+          ".15"
+        ],
+        "nodeType": "PragmaDirective",
+        "src": "194:23:53"
+      },
+      {
+        "abstract": false,
+        "baseContracts": [],
+        "canonicalName": "IZoinksCallee",
+        "contractDependencies": [],
+        "contractKind": "interface",
+        "fullyImplemented": false,
+        "id": 24577,
+        "linearizedBaseContracts": [
+          24577
+        ],
+        "name": "IZoinksCallee",
+        "nameLocation": "231:13:53",
+        "nodeType": "ContractDefinition",
+        "nodes": [
+          {
+            "functionSelector": "3c3a0c22",
+            "id": 24576,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "ZoinksCall",
+            "nameLocation": "261:10:53",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 24574,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 24567,
+                  "mutability": "mutable",
+                  "name": "sender",
+                  "nameLocation": "290:6:53",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 24576,
+                  "src": "282:14:53",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 24566,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "282:7:53",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 24569,
+                  "mutability": "mutable",
+                  "name": "amount0",
+                  "nameLocation": "315:7:53",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 24576,
+                  "src": "307:15:53",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 24568,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "307:7:53",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 24571,
+                  "mutability": "mutable",
+                  "name": "amount1",
+                  "nameLocation": "341:7:53",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 24576,
+                  "src": "333:15:53",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 24570,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "333:7:53",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 24573,
+                  "mutability": "mutable",
+                  "name": "data",
+                  "nameLocation": "374:4:53",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 24576,
+                  "src": "359:19:53",
+                  "stateVariable": false,
+                  "storageLocation": "calldata",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_bytes_calldata_ptr",
+                    "typeString": "bytes"
+                  },
+                  "typeName": {
+                    "id": 24572,
+                    "name": "bytes",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "359:5:53",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bytes_storage_ptr",
+                      "typeString": "bytes"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "271:114:53"
+            },
+            "returnParameters": {
+              "id": 24575,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "394:0:53"
+            },
+            "scope": 24577,
+            "src": "252:143:53",
+            "stateMutability": "nonpayable",
+            "virtual": false,
+            "visibility": "external"
+          }
+        ],
+        "scope": 24578,
+        "src": "221:177:53",
+        "usedErrors": []
+      }
+    ],
+    "src": "194:206:53"
+  },
+  "compiler": {
+    "name": "solc",
+    "version": "0.8.15+commit.e14f2714.Emscripten.clang"
+  },
+  "networks": {},
+  "schemaVersion": "3.4.8",
+  "updatedAt": "2022-08-08T18:33:03.005Z",
+  "devdoc": {
+    "kind": "dev",
+    "methods": {},
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {},
+    "version": 1
+  }
+}

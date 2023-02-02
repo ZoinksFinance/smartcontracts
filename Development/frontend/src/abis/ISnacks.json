@@ -1,0 +1,212 @@
+{
+  "contractName": "ISnacks",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "buyTotal",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "redeem",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "metadata": "{\"compiler\":{\"version\":\"0.8.15+commit.e14f2714\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_amount\",\"type\":\"uint256\"}],\"name\":\"buyTotal\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_amount\",\"type\":\"uint256\"}],\"name\":\"redeem\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"kind\":\"dev\",\"methods\":{},\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{},\"version\":1}},\"settings\":{\"compilationTarget\":{\"project:/src/contracts/interfaces/ISnacks.sol\":\"ISnacks\"},\"evmVersion\":\"london\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\"},\"optimizer\":{\"enabled\":true,\"runs\":0},\"remappings\":[]},\"sources\":{\"project:/src/contracts/interfaces/ISnacks.sol\":{\"keccak256\":\"0x29b0dfca76fa99f853e45ca8bf51218902e7d21d829b6f641fff88134a91055d\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://5ea8e43a6930c7b1379ea78b00d237d60871b2d5a4ff9ea784bf62702ef90841\",\"dweb:/ipfs/QmfMpnp8bWPQfbTzh8i6KtXSwkN8Myo3UAvXy3m88TuNvH\"]}},\"version\":1}",
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "immutableReferences": {},
+  "generatedSources": [],
+  "deployedGeneratedSources": [],
+  "sourceMap": "",
+  "deployedSourceMap": "",
+  "source": "// SPDX-License-Identifier: MIT\r\npragma solidity 0.8.15;\r\n\r\ninterface ISnacks {\r\n    function buyTotal(uint256 _amount) external;\r\n    function redeem(uint256 _amount) external;\r\n}\r\n",
+  "sourcePath": "C:\\GitHub\\zoinks\\contracts\\Development\\src\\contracts\\interfaces\\ISnacks.sol",
+  "ast": {
+    "absolutePath": "project:/src/contracts/interfaces/ISnacks.sol",
+    "exportedSymbols": {
+      "ISnacks": [
+        24544
+      ]
+    },
+    "id": 24545,
+    "license": "MIT",
+    "nodeType": "SourceUnit",
+    "nodes": [
+      {
+        "id": 24533,
+        "literals": [
+          "solidity",
+          "0.8",
+          ".15"
+        ],
+        "nodeType": "PragmaDirective",
+        "src": "33:23:50"
+      },
+      {
+        "abstract": false,
+        "baseContracts": [],
+        "canonicalName": "ISnacks",
+        "contractDependencies": [],
+        "contractKind": "interface",
+        "fullyImplemented": false,
+        "id": 24544,
+        "linearizedBaseContracts": [
+          24544
+        ],
+        "name": "ISnacks",
+        "nameLocation": "70:7:50",
+        "nodeType": "ContractDefinition",
+        "nodes": [
+          {
+            "functionSelector": "c8352730",
+            "id": 24538,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "buyTotal",
+            "nameLocation": "94:8:50",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 24536,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 24535,
+                  "mutability": "mutable",
+                  "name": "_amount",
+                  "nameLocation": "111:7:50",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 24538,
+                  "src": "103:15:50",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 24534,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "103:7:50",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "102:17:50"
+            },
+            "returnParameters": {
+              "id": 24537,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "128:0:50"
+            },
+            "scope": 24544,
+            "src": "85:44:50",
+            "stateMutability": "nonpayable",
+            "virtual": false,
+            "visibility": "external"
+          },
+          {
+            "functionSelector": "db006a75",
+            "id": 24543,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "redeem",
+            "nameLocation": "144:6:50",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 24541,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 24540,
+                  "mutability": "mutable",
+                  "name": "_amount",
+                  "nameLocation": "159:7:50",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 24543,
+                  "src": "151:15:50",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 24539,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "151:7:50",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "150:17:50"
+            },
+            "returnParameters": {
+              "id": 24542,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "176:0:50"
+            },
+            "scope": 24544,
+            "src": "135:42:50",
+            "stateMutability": "nonpayable",
+            "virtual": false,
+            "visibility": "external"
+          }
+        ],
+        "scope": 24545,
+        "src": "60:120:50",
+        "usedErrors": []
+      }
+    ],
+    "src": "33:149:50"
+  },
+  "compiler": {
+    "name": "solc",
+    "version": "0.8.15+commit.e14f2714.Emscripten.clang"
+  },
+  "networks": {},
+  "schemaVersion": "3.4.8",
+  "updatedAt": "2022-08-08T18:33:03.001Z",
+  "devdoc": {
+    "kind": "dev",
+    "methods": {},
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {},
+    "version": 1
+  }
+}

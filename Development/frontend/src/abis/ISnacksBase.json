@@ -1,0 +1,144 @@
+{
+  "contractName": "ISnacksBase",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "amountSnacksToBurn",
+          "type": "uint256"
+        }
+      ],
+      "name": "redeem",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "metadata": "{\"compiler\":{\"version\":\"0.8.15+commit.e14f2714\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"amountSnacksToBurn\",\"type\":\"uint256\"}],\"name\":\"redeem\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"kind\":\"dev\",\"methods\":{},\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{},\"version\":1}},\"settings\":{\"compilationTarget\":{\"project:/src/contracts/interfaces/ISnacksBase.sol\":\"ISnacksBase\"},\"evmVersion\":\"london\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\"},\"optimizer\":{\"enabled\":true,\"runs\":0},\"remappings\":[]},\"sources\":{\"project:/src/contracts/interfaces/ISnacksBase.sol\":{\"keccak256\":\"0xf2ee95f8336b748ae7d84ee369f915ef565eb7fa874171c14e026a833d72de5e\",\"license\":\"UNLICENSED\",\"urls\":[\"bzz-raw://97c112df6fe3e05373af7ddda5420f62d79d53f5b90ec0857aca5798394d819c\",\"dweb:/ipfs/QmXRNzL1rVRLJMLcsFc5WEM9yghohdjsfYjHsb52UE9PsV\"]}},\"version\":1}",
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "immutableReferences": {},
+  "generatedSources": [],
+  "deployedGeneratedSources": [],
+  "sourceMap": "",
+  "deployedSourceMap": "",
+  "source": "// SPDX-License-Identifier: UNLICENSED\r\npragma solidity 0.8.15;\r\n\r\ninterface ISnacksBase {\r\n    function redeem(uint256 amountSnacksToBurn) external;\r\n}\r\n",
+  "sourcePath": "C:\\GitHub\\zoinks\\contracts\\Development\\src\\contracts\\interfaces\\ISnacksBase.sol",
+  "ast": {
+    "absolutePath": "project:/src/contracts/interfaces/ISnacksBase.sol",
+    "exportedSymbols": {
+      "ISnacksBase": [
+        24552
+      ]
+    },
+    "id": 24553,
+    "license": "UNLICENSED",
+    "nodeType": "SourceUnit",
+    "nodes": [
+      {
+        "id": 24546,
+        "literals": [
+          "solidity",
+          "0.8",
+          ".15"
+        ],
+        "nodeType": "PragmaDirective",
+        "src": "40:23:51"
+      },
+      {
+        "abstract": false,
+        "baseContracts": [],
+        "canonicalName": "ISnacksBase",
+        "contractDependencies": [],
+        "contractKind": "interface",
+        "fullyImplemented": false,
+        "id": 24552,
+        "linearizedBaseContracts": [
+          24552
+        ],
+        "name": "ISnacksBase",
+        "nameLocation": "77:11:51",
+        "nodeType": "ContractDefinition",
+        "nodes": [
+          {
+            "functionSelector": "db006a75",
+            "id": 24551,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "redeem",
+            "nameLocation": "105:6:51",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 24549,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 24548,
+                  "mutability": "mutable",
+                  "name": "amountSnacksToBurn",
+                  "nameLocation": "120:18:51",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 24551,
+                  "src": "112:26:51",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 24547,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "112:7:51",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "visibility": "internal"
+                }
+              ],
+              "src": "111:28:51"
+            },
+            "returnParameters": {
+              "id": 24550,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "148:0:51"
+            },
+            "scope": 24552,
+            "src": "96:53:51",
+            "stateMutability": "nonpayable",
+            "virtual": false,
+            "visibility": "external"
+          }
+        ],
+        "scope": 24553,
+        "src": "67:85:51",
+        "usedErrors": []
+      }
+    ],
+    "src": "40:114:51"
+  },
+  "compiler": {
+    "name": "solc",
+    "version": "0.8.15+commit.e14f2714.Emscripten.clang"
+  },
+  "networks": {},
+  "schemaVersion": "3.4.8",
+  "updatedAt": "2022-08-08T18:33:03.002Z",
+  "devdoc": {
+    "kind": "dev",
+    "methods": {},
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {},
+    "version": 1
+  }
+}

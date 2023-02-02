@@ -1,0 +1,44 @@
+name: documentation CI/CD
+
+on:
+  push:
+    branches: [ "develop" ]
+
+jobs:
+
+  documentation:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./Development/dapp
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Make envfile
+        uses: SpicyPizza/create-envfile@v1.3
+        with:
+          envkey_ABI_DELIVERY: "file"
+          envkey_MEGANODE_SECRET: ${{ secrets.MEGANODE_SECRET }}
+          envkey_MNEMONIC: "test"
+          directory: ./Development/dapp/
+          file_name: .env
+
+      - name: Install dependencies, generate surya and hardhat doc
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+      - run: npm i --force
+      - run: ../utils/generate-reports.sh
+      - run: npx hardhat docgen --no-compile
+      - run: ls -l ./docs; echo "publishing should be here..... "
+
+      - name: Push to information repository
+        uses: cpina/github-action-push-to-another-repository@main
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+        with:
+          source-directory: Development/reports2/
+          destination-github-username: 'ZOINKSCONTRACT'
+          destination-repository-name: 'information'
+          target-branch: main
+          target-directory: reports
