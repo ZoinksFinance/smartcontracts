@@ -10,7 +10,7 @@ module.exports = async ({
     deployer
   } = await getNamedAccounts();
   await execute(
-    'ApeSwapPool',
+    hre.names.internal.apeSwapPool,
     {from: deployer, log: true},
     'setPoolRewardDistributor',
     deployer

@@ -1,7 +1,7 @@
 const { ethers, deployments } = require("hardhat");
 const singleRewardPoolTestSuite = require('../reusable_test_suits/single_reward_pool_test_suite');
 
-describe("ApeSwapPool", () => {
+describe(hre.names.internal.apeSwapPool, () => {
   const rewardsDuration = ethers.BigNumber.from("43200");
 
   beforeEach(async () => {
@@ -15,14 +15,14 @@ describe("ApeSwapPool", () => {
     },
     async () => {
       return await ethers.getContractAt(
-        "ApeSwapPool",
-        (await deployments.get("ApeSwapPool")).address
+        hre.names.internal.apeSwapPool,
+        (await deployments.get(hre.names.internal.apeSwapPool)).address
       );
     },
     async () => {
       return await ethers.getContractAt(
-        "MockToken",
-        (await deployments.get("ApePairLP")).address
+        hre.names.internal.mockToken,
+        (await deployments.get(hre.names.external.pairs.ape.lp)).address
       );
     },
     rewardsDuration

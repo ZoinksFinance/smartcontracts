@@ -1,5 +1,6 @@
 const { expect } = require("chai");
-const { ethers, deployments, getNamedAccounts } = require("hardhat");
+const hre = require("hardhat");
+const { ethers, deployments, getNamedAccounts } = hre;
 const {
   mockedLiquidity,
   mockedResultOfSwap,
@@ -13,6 +14,7 @@ const { time } = require("@nomicfoundation/hardhat-network-helpers");
 describe("Pulse", () => {
 
     let deployer;
+    let owner;
     let bob;
     let seniorage;
     let busd;
@@ -34,67 +36,101 @@ describe("Pulse", () => {
     beforeEach(async () => {
       await deployments.fixture(['pulse_test_fixtures']);
       [deployer, bob] = await ethers.getSigners();
+      owner = deployer;
 
       poolRewardDistributor = await ethers.getContractAt(
-        'PoolRewardDistributor',
-        (await deployments.get('PoolRewardDistributor')).address
+        hre.names.internal.poolRewardDistributor,
+        (await deployments.get(hre.names.internal.poolRewardDistributor)).address
       );
       seniorage = await ethers.getContractAt(
-        'Seniorage',
-        (await deployments.get('Seniorage')).address
+        hre.names.internal.seniorage,
+        (await deployments.get(hre.names.internal.seniorage)).address
       );
       zoinks = await ethers.getContractAt(
-        'Zoinks',
-        (await deployments.get('Zoinks')).address
+        hre.names.internal.zoinks,
+        (await deployments.get(hre.names.internal.zoinks)).address
       );
       pancakeSwapPool = await ethers.getContractAt(
-        'PancakeSwapPool',
-        (await deployments.get('PancakeSwapPool')).address
+        hre.names.internal.pancakeSwapPool,
+        (await deployments.get(hre.names.internal.pancakeSwapPool)).address
       );
       busd = await ethers.getContractAt(
-        'MockToken',
-        (await deployments.get('BUSD')).address
+        hre.names.internal.mockToken,
+        (await deployments.get(hre.names.external.tokens.busd)).address
       );
       eth = await ethers.getContractAt(
-        'MockToken',
-        (await deployments.get('ETH')).address
+        hre.names.internal.mockToken,
+        (await deployments.get(hre.names.external.tokens.eth)).address
       );
       btc = await ethers.getContractAt(
-        'MockToken',
-        (await deployments.get('BTC')).address
+        hre.names.internal.mockToken,
+        (await deployments.get(hre.names.external.tokens.btc)).address
       );
       router = await ethers.getContractAt(
-        'IRouter',
-        (await deployments.get('PancakeSwapRouter')).address
+        hre.names.internal.iRouter,
+        (await deployments.get(hre.names.external.routers.pancake)).address
       );
       pulse = await ethers.getContractAt(
-        'Pulse',
-        (await deployments.get('Pulse')).address
+        hre.names.internal.pulse,
+        (await deployments.get(hre.names.internal.pulse)).address
       );
       snacks = await ethers.getContractAt(
-        'Snacks',
-        (await deployments.get('Snacks')).address
+        hre.names.internal.snacks,
+        (await deployments.get(hre.names.internal.snacks)).address
       );
       ethSnacks = await ethers.getContractAt(
-        'EthSnacks',
-        (await deployments.get('EthSnacks')).address
+        hre.names.internal.ethSnacks,
+        (await deployments.get(hre.names.internal.ethSnacks)).address
       );
       btcSnacks = await ethers.getContractAt(
-        'BtcSnacks',
-        (await deployments.get('BtcSnacks')).address
+        hre.names.internal.btcSnacks,
+        (await deployments.get(hre.names.internal.btcSnacks)).address
       );
       snacksPool = await ethers.getContractAt(
-        'SnacksPool',
-        (await deployments.get('SnacksPool')).address
+        hre.names.internal.snacksPool,
+        (await deployments.get(hre.names.internal.snacksPool)).address
       );
       const pairLpToken = await ethers.getContractAt(
-        'MockToken',
-        (await deployments.get("PancakePairLP")).address
+        hre.names.internal.mockToken,
+        (await deployments.get(hre.names.external.pairs.pancake.lp)).address
       );
       await pairLpToken.mint(pulse.address, mockedLiquidity);
     });
 
-    it("Successful distributeSnacks() execution", async() => {
+    it("1. Successful configure() execution", async() => {
+      const pairAddress = await pulse.cakeLP();
+      await pulse.configure(
+        pairAddress,
+        zoinks.address,
+        snacks.address,
+        btcSnacks.address,
+        ethSnacks.address,
+        pancakeSwapPool.address,
+        snacksPool.address,
+        seniorage.address,
+        deployer.address
+      )
+    });
+
+    it("2. Successful distributeBtcSnacksAndEthSnacks() execution", async() => {
+      // Only authority check
+      await expect(
+        pulse.connect(bob).distributeBtcSnacksAndEthSnacks()
+      ).to.be.revertedWith("Pulse: caller is not authorised");
+      // Zero balance distribution
+      await pulse.distributeBtcSnacksAndEthSnacks();
+      // Transfer 1000 BTCSNACKS
+      await btcSnacks.transfer(pulse.address, amountToTransfer);
+      // Transfer 1000 ETHSNACKS
+      await ethSnacks.transfer(pulse.address, amountToTransfer);
+      // Distribution
+      await pulse.distributeBtcSnacksAndEthSnacks();
+      // Check seniorage balance
+      expect(await btcSnacks.balanceOf(seniorage.address)).to.equal(amountToTransfer.div(2));
+      expect(await ethSnacks.balanceOf(seniorage.address)).to.equal(amountToTransfer.div(2));
+    });
+
+    it("3. Successful distributeSnacks() execution (sufficient amount to buy snacks)", async() => {
       await expect(pulse.connect(bob).distributeSnacks()).to
         .be.revertedWith("Pulse: caller is not authorised");
       await pulse.distributeSnacks();
@@ -113,13 +149,19 @@ describe("Pulse", () => {
       expect(await zoinks.balanceOf(pulse.address)).to.equal(amountOfZoinks);
     });
 
-    it("Successful distrubuteZoinks() execution", async() => {
+    it("4. Successful distributeSnacks() execution (insufficient amount to buy snacks)", async() => {
+      // Transfer 1 wei SNACKS to Pulse
+      await snacks.transfer(pulse.address, 100);
+      // Distribution
+      await pulse.distributeSnacks();
+      // Checking balances
+      expect(await snacks.balanceOf(pulse.address)).to.equal(90);
+      expect(await zoinks.balanceOf(pulse.address)).to.equal(0);
+    });
+
+    it("5. Successful distributeZoinks() execution (sufficient amount to buy snacks)", async() => {
       // // Require check
-      await pulse.distrubuteZoinks(
-        ZERO,
-        ZERO,
-        ZERO
-      );
+      await pulse.distributeZoinks();
       // // Transfer 1000 ZOINKS
       await zoinks.transfer(pulse.address, amountToTransfer);
       // // 10% ZOINKS of pulse balance
@@ -128,27 +170,28 @@ describe("Pulse", () => {
       const amountOfSnacks = await snacks.calculateBuyTokenAmountOnMint(amountToOperate);
       const fee = amountOfSnacks.mul(5).div(100);
 
-      await pulse.distrubuteZoinks(
-        mockedResultOfSwap,
-        ZERO,
-        ZERO
-      );
+      await pulse.distributeZoinks();
       // Checking balances
       expect(await snacks.balanceOf(pulse.address)).to.be.equal(amountOfSnacks.sub(fee));
       expect(await pancakeSwapPool.getBalance(pulse.address)).to.be.equal(mockedLiquidity);
     });
 
-    it("Successful harvest() execution", async() => {
+    it("6. Successful distributeZoinks() execution (insufficient amount to buy snacks)", async() => {
+      // Transfer 100 wei ZOINKS
+      await zoinks.transfer(pulse.address, 100);
+      await pulse.distributeZoinks();
+      // Checking balances
+      expect(await snacks.balanceOf(pulse.address)).to.be.equal(0);
+      expect(await pancakeSwapPool.getBalance(pulse.address)).to.be.equal(mockedLiquidity);
+    });
+
+    it("7. Successful harvest() execution", async() => {
       // Transfer 1000 ZOINKS
       await zoinks.transfer(pulse.address, amountToTransfer);
       // Transfer 1000 SNACKS to pulse
       await snacks.transfer(pulse.address, amountToTransfer);
 
-      await pulse.distrubuteZoinks(
-        mockedResultOfSwap,
-        ZERO,
-        ZERO
-      );
+      await pulse.distributeZoinks();
       await pulse.distributeSnacks();
 
       // Transfer rewards
@@ -212,5 +255,26 @@ describe("Pulse", () => {
       expect((await btcSnacks.balanceOf(pulse.address)).sub(oldBtcSnacksBalance)).to.be.equal(
         expectedRewardFromSnacksPoolInBtcSnacks.add(expectedRewardFromPancakeSwapPoolInBtcSnacks)
       );
+    });
+
+    it("8. Test pause", async () => {
+      // ARRANGE
+      // ACT
+      await expect(pulse.pause())
+        .to.emit(pulse, "Paused")
+        .withArgs(owner.address);
+  
+      // ASSERT
+    });
+  
+    it("9. Test unpause", async () => {
+      // ARRANGE
+      // ACT
+      await pulse.pause();
+      await expect(pulse.unpause())
+        .to.emit(pulse, "Unpaused")
+        .withArgs(owner.address);
+  
+      // ASSERT
     });
 });

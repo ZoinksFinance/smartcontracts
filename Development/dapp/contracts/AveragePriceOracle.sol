@@ -2,35 +2,35 @@
 pragma solidity 0.8.15;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@prb/math/contracts/PRBMathUD60x18.sol";
 
+import "./interfaces/IAveragePriceOracle.sol";
 import "./interfaces/IPair.sol";
 
-/// @title Контракт, реализующий логику подсчета TWAP.
-contract AveragePriceOracle is Ownable {
+contract AveragePriceOracle is IAveragePriceOracle, Ownable, Initializable {
     using PRBMathUD60x18 for uint256;
 
-    uint256 constant public PERIOD = 12 hours;
-    uint256 constant private BASE_PERCENT = 10000;
-    uint256 constant private APE_SWAP_PERCENT = 1500;
-    uint256 constant private BI_SWAP_PERCENT = 1500;
-    uint256 constant private PANCAKE_SWAP_PERCENT = 3500;
-    uint256 constant private TWAP_PERCENT = 6500;
-    uint256 constant private Q112 = 1 << 112;
+    uint256 public constant PERIOD = 12 hours;
+    uint256 private constant BASE_PERCENT = 10000;
+    uint256 private constant APE_SWAP_PERCENT = 1500;
+    uint256 private constant BI_SWAP_PERCENT = 1500;
+    uint256 private constant PANCAKE_SWAP_PERCENT = 3500;
+    uint256 private constant TWAP_PERCENT = 6500;
+    uint256 private constant Q112 = 1 << 112;
 
     address public zoinks;
     address public apeSwapPair;
     address public biSwapPair;
     address public pancakeSwapPair;
-    uint256 public apeSwapAveragePriceLast = PRBMathUD60x18.fromUint(0);
-    uint256 public biSwapAveragePriceLast = PRBMathUD60x18.fromUint(0);
-    uint256 public pancakeSwapAveragePriceLast = PRBMathUD60x18.fromUint(0);
+    uint256 public apeSwapAveragePriceLast;
+    uint256 public biSwapAveragePriceLast;
+    uint256 public pancakeSwapAveragePriceLast;
     uint256 public twapLast;
     uint256 private _apeSwapPriceCumulativeLast;
     uint256 private _biSwapPriceCumulativeLast;
     uint256 private _pancakeSwapPriceCumulativeLast;
     uint32 private _blockTimestampLast;
-    bool private _initialized;
     
     modifier onlyZoinks {
         require(
@@ -41,13 +41,13 @@ contract AveragePriceOracle is Ownable {
     }
 
     /**
-    * @notice Функция, реализующая логику инициализации контракта.
-    * @dev Для успешного выполнения функции необходимо, чтобы была ликвидность
-    * на ApeSwap, BiSwap и PancakeSwap.
-    * @param zoinks_ Адрес ZOINKS токена.
-    * @param apeSwapPair_ Адрес контракта Pair от ApeSwap.
-    * @param biSwapPair_ Адрес контракта Pair от BiSwap.
-    * @param pancakeSwapPair_ Адрес контракта Pair от PancakeSwap.
+    * @notice Initializes the contract.
+    * @dev To initialize the contract, there must be liquidity on 
+    * ApeSwap, BiSwap and PancakeSwap.
+    * @param zoinks_ Zoinks token address.
+    * @param apeSwapPair_ Pair contract address (from ApeSwap DEX).
+    * @param biSwapPair_ Pair contract address (from BiSwap DEX).
+    * @param pancakeSwapPair_ Pair contract address (from PancakeSwap DEX).
     */
     function initialize(
         address zoinks_,
@@ -57,11 +57,8 @@ contract AveragePriceOracle is Ownable {
     )
         external
         onlyOwner
+        initializer
     {
-        require(
-            !_initialized,
-            "AveragePriceOracle: already initialized"
-        );
         zoinks = zoinks_;
         apeSwapPair = apeSwapPair_;
         biSwapPair = biSwapPair_;
@@ -88,20 +85,14 @@ contract AveragePriceOracle is Ownable {
         _apeSwapPriceCumulativeLast = IPair(apeSwapPair_).price1CumulativeLast();
         _biSwapPriceCumulativeLast = IPair(biSwapPair_).price1CumulativeLast();
         _pancakeSwapPriceCumulativeLast = IPair(pancakeSwapPair_).price1CumulativeLast();
-        _initialized = true;
     }
 
     /**
-    * @notice Функция, реализующая логику обновления текущего TWAP.
-    * @dev Для успешного выполнения функции необходимо, чтобы контракт
-    * был инициализирован. Может быть вызвана только Zoinks контрактом. Вызывается
-    * раз в 12 часов.
+    * @notice Updates the stored time-weighted average price.
+    * @dev The function can only be called successfully if the contract has been initialized. 
+    * Called by the Zoinks contract once every 12 hours.
     */
     function update() external onlyZoinks {
-        require(
-            _initialized,
-            "AveragePriceOracle: not initialized"
-        );
         IPair(apeSwapPair).sync();
         IPair(biSwapPair).sync();
         IPair(pancakeSwapPair).sync();
@@ -131,8 +122,12 @@ contract AveragePriceOracle is Ownable {
             .mul(BASE_PERCENT)
             .div(TWAP_PERCENT)).toUint();
     }
-
-    /// @notice Функция, реализующая логику получения timestamp текущего блока.
+ 
+    /**
+    * @notice Retrieves the current block timestamp.
+    * @dev Returns the current block timestamp within the range of uint32, i.e. [0, 2**32 - 1].
+    * @return Current block timestamp.
+    */
     function _currentBlockTimestamp() private view returns (uint32) {
         return uint32(block.timestamp % (1 << 32));
     }

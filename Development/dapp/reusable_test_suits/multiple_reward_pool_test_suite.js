@@ -1,6 +1,6 @@
 const { expect } = require("chai");
 const { ethers, deployments, getNamedAccounts } = require("hardhat");
-const { ZERO_ADDRESS, mintZoinksAndAllSnacks } = require("../deploy/helpers");
+const { ZERO_ADDRESS, mintZoinksAndAllSnacks, mintZoinks } = require("../deploy/helpers");
 const { time } = require("@nomicfoundation/hardhat-network-helpers");
 
 module.exports = (
@@ -92,22 +92,14 @@ module.exports = (
     }
 
     const expects = [
-      async () => expect(aliceBalances[0])
+      async () => expect(aliceBalances[0], "Zoinks balance of Alice is incorrect")
         .to.equal(zoinksPotentialReward),
-      async () => expect(await zoinks.balanceOf(seniorage.address))
-        .to.equal(zoinksPotentialReward.div(2)),
-      async () => expect(aliceBalances[1])
-        .to.equal(snacksPotentialReward.div(2)),
-      async () => expect(await snacks.balanceOf(seniorage.address))
-        .to.equal(snacksPotentialReward.div(2)),
-      async () => expect(aliceBalances[2])
-        .to.equal(ethSnacksPotentialReward.div(2)),
-      async () => expect(await ethSnacks.balanceOf(seniorage.address))
-        .to.equal(ethSnacksPotentialReward.div(2)),
-      async () => expect(aliceBalances[3])
-        .to.equal(btcSnacksPotentialReward.div(2)),
-      async () => expect(await btcSnacks.balanceOf(seniorage.address))
-          .to.equal(btcSnacksPotentialReward.div(2))
+      async () => expect(aliceBalances[1], "Snacks balance of Alice is incorrect")
+        .to.equal(snacksPotentialReward),
+      async () => expect(aliceBalances[2], "EthSnacks balance of Alice is incorrect")
+        .to.equal(ethSnacksPotentialReward),
+      async () => expect(aliceBalances[3], "BtcSnacks balance of Alice is incorrect")
+        .to.equal(btcSnacksPotentialReward),
     ];
     for (let i = 0; i < expects.length; i++) {
       if (!disabledExpectsForBalancesWithPenalty.includes(i)) {
@@ -144,14 +136,14 @@ module.exports = (
       );
     }
     const expects = [
-      () => expect(aliceBalancesDiffs[0]).to.equal(zoinksPotentialReward.sub(zoinksPotentialReward.div(10))),
-      () => expect(zoinksBalanceSeniorageDiff).to.equal(zoinksPotentialReward.div(10)),
-      () => expect(aliceBalancesDiffs[1]).to.equal(snacksPotentialReward.sub(snacksPotentialReward.div(10))),
-      () => expect(snacksBalanceSeniorageDiff).to.equal(snacksPotentialReward.div(10)),
-      () => expect(aliceBalancesDiffs[2]).to.equal(ethSnacksPotentialReward.sub(ethSnacksPotentialReward.div(10))),
-      () => expect(ethSnacksBalanceSeniorageDiff).to.equal(ethSnacksPotentialReward.div(10)),
-      () => expect(aliceBalancesDiffs[3]).to.equal(btcSnacksPotentialReward.sub(btcSnacksPotentialReward.div(10))),
-      () => expect(btcSnacksBalanceSeniorageDiff).to.equal(btcSnacksPotentialReward.div(10))
+      () => expect(aliceBalancesDiffs[0], "Zoinks reward amount is incorrect for Alice")
+        .to.equal(zoinksPotentialReward),
+      () => expect(aliceBalancesDiffs[1], "Snacks reward amount is incorrect for Alice")
+        .to.equal(snacksPotentialReward),
+      () => expect(aliceBalancesDiffs[2], "EthSnacks reward amount is incorrect for Alice")
+        .to.equal(ethSnacksPotentialReward),
+      () => expect(aliceBalancesDiffs[3], "BtcSnacks reward amount is incorrect for Alice")
+        .to.equal(btcSnacksPotentialReward),
     ];
     for (let i = 0; i < expects.length; i++) {
       if (!disabledExpectsForBalancesWithoutPenalty.includes(i)) {
@@ -189,6 +181,7 @@ module.exports = (
     await stakingTokenMintingAction(alice.address, amountToStake, lpToken);
     await lpToken.connect(alice).approve(pool.address, amountToStake);
     await pool.connect(alice).stake(amountToStake);
+    
     // Calculate rewards
     let zoinksPotentialReward = await pool.calculatePotentialReward(
       zoinks.address, alice.address, 1
@@ -289,6 +282,8 @@ module.exports = (
         await pool.stake(amountToStake);
         // Balance check
         expect(await pool.getBalance(owner.address)).to.equal(amountToStake);
+        // Total supply check
+        expect(await pool.getTotalSupply()).to.equal(amountToStake);
     }),
 
     () => it("Successful notifyRewardAmount() execution", async () => {
@@ -299,29 +294,35 @@ module.exports = (
         await pool.stake(amountToStake);
         // Reward transfer
         const amountToTransfer = ethers.utils.parseEther("1000");
-        await zoinks.transfer(pool.address, amountToTransfer);
+        
+        await mintZoinksAndAllSnacks(deployments, owner, amountToTransfer);
+        await snacks.approve(pool.address, amountToTransfer.mul(10));
+        await snacks.transfer(pool.address, amountToTransfer);
         // Notify
-        await pool.notifyRewardAmount(zoinks.address, amountToTransfer);
+        await expect(pool.notifyRewardAmount(pool.address, amountToTransfer))
+          .to.be.revertedWith("MultipleRewardPool: invalid token");
+        await pool.notifyRewardAmount(snacks.address, amountToTransfer);
         let block = await ethers.provider.getBlock();
         // Contract state check
-        expect(await pool.rewardRates(zoinks.address)).to.equal(amountToTransfer.div(rewardsDuration));
-        expect(await pool.lastUpdateTimePerToken(zoinks.address)).to.equal(block.timestamp);
-        expect(await pool.periodFinishPerToken(zoinks.address)).to.equal(rewardsDuration.add(block.timestamp));
+        expect(await pool.rewardRates(snacks.address)).to.equal(amountToTransfer.div(rewardsDuration));
+        expect(await pool.lastUpdateTimePerToken(snacks.address)).to.equal(block.timestamp);
+        expect(await pool.periodFinishPerToken(snacks.address)).to.equal(rewardsDuration.add(block.timestamp));
         const previousPeriodFinishPerToken = rewardsDuration.add(block.timestamp);
-        const previousRewardRate = await pool.rewardRates(zoinks.address);
+        const previousRewardRate = await pool.rewardRates(snacks.address);
         // Reward transfer
-        await zoinks.transfer(pool.address, amountToTransfer);
+        await mintZoinks(deployments, owner, amountToTransfer);
+        await snacks.transfer(pool.address, amountToTransfer);
         // Notify
-        await pool.notifyRewardAmount(zoinks.address, amountToTransfer);
+        await pool.notifyRewardAmount(snacks.address, amountToTransfer);
         block = await ethers.provider.getBlock();
         const remaining = previousPeriodFinishPerToken.sub(block.timestamp);
         const leftover = remaining.mul(previousRewardRate);
         // Contract state check
-        expect(await pool.rewardRates(zoinks.address))
+        expect(await pool.rewardRates(snacks.address))
           .to.equal(amountToTransfer.add(leftover).div(rewardsDuration));
-        expect(await pool.lastUpdateTimePerToken(zoinks.address))
+        expect(await pool.lastUpdateTimePerToken(snacks.address))
           .to.equal(block.timestamp);
-        expect(await pool.periodFinishPerToken(zoinks.address))
+        expect(await pool.periodFinishPerToken(snacks.address))
           .to.equal(rewardsDuration.add(block.timestamp));
         // 10 days passed
         await time.increase(864000);
@@ -336,8 +337,14 @@ module.exports = (
         // Get reward from user
         await pool.getReward();
         // Big reward notification
-        await expect(pool.notifyRewardAmount(zoinks.address, amountToTransfer.mul(1000)))
-          .to.be.revertedWith("MultipleRewardPool: provided reward too high");
+        const stakingToken = await pool.stakingToken();
+        if (snacks.address != stakingToken) {
+          await expect(pool.notifyRewardAmount(snacks.address, amountToTransfer.mul(1000)))
+            .to.be.revertedWith("MultipleRewardPool: provided reward too high");
+        } else {
+          await expect(pool.notifyRewardAmount(snacks.address, amountToTransfer.mul(1000)))
+            .to.be.revertedWith("SnacksPool: provided reward too high");
+        }
     }),
 
     () => it("Successful getReward() execution", async () => {
@@ -375,10 +382,8 @@ module.exports = (
         }
       );
       let expectedLpTokenBalance = balanceBefore.add(amountToStake);
-      if (stakingTokenIndex === -1) {
-        expectedLpTokenBalance = expectedLpTokenBalance.mul(2);
-      }
-      expect(await lpToken.balanceOf(alice.address)).to.equal(expectedLpTokenBalance);
+      expect(await lpToken.balanceOf(alice.address), "Balance of Alice in LP token is incorrect")
+        .to.equal(expectedLpTokenBalance);
     }),
 
     () => it("Successful withdraw() execution", async () => {
@@ -391,9 +396,21 @@ module.exports = (
       await pool.stake(amountToStake);
       // Calculate balance before
       let balanceBefore = await lpToken.balanceOf(owner.address);
+      // Withdraw before 24 hours passed
       await pool.withdraw(amountToStake);
       // Balance check
-      expect(await lpToken.balanceOf(owner.address)).to.equal(balanceBefore.add(amountToStake));
+      expect(await lpToken.balanceOf(owner.address), "Balance of owner in LP token is incorrect")
+        .to.equal(balanceBefore.add(amountToStake.div(2)));
+      // Stake
+      await lpToken.approve(pool.address, amountToStake.div(2));
+      await pool.stake(amountToStake.div(2));
+      // 24 hours passed
+      await time.increase(86400);
+      // Withdraw
+      balanceBefore = await lpToken.balanceOf(owner.address);
+      const expectedReturn = amountToStake.div(2).mul(90).div(100);
+      await pool.withdraw(amountToStake.div(2));
+      expect(await lpToken.balanceOf(owner.address)).to.equal(balanceBefore.add(expectedReturn));
     }),
 
     () => it("Successful lastTimeRewardApplicable() execution", async () => {
@@ -465,18 +482,6 @@ module.exports = (
       await pool.setRewardsDuration(100);
     }),
 
-    () => it("Successful addRewardToken() execution", async () => {
-      await expect(pool.addRewardToken(zoinks.address))
-        .to.be.revertedWith("MultipleRewardPool: already contains");
-      await pool.addRewardToken(alice.address);
-    }),
-
-    () => it("Successful removeRewardToken() execution", async () => {
-      await expect(pool.removeRewardToken(alice.address))
-        .to.be.revertedWith("MultipleRewardPool: token not found");
-      await pool.removeRewardToken(zoinks.address);
-    }),
-
     () => it("Successful getRewardToken() execution", async () => {
       expect(await pool.getRewardToken(2)).to.not.be.equal(ZERO_ADDRESS);
     }),
@@ -496,13 +501,34 @@ module.exports = (
       await pool.notifyRewardAmount(zoinks.address, amountToTransfer);
     }),
 
-    () => it("Successful onlyValidToken check", async () => {
-      await expect(pool.calculatePotentialReward(
-        alice.address, owner.address, 86400
-      )).to.be.revertedWith("MultipleRewardPool: not a reward token");
-      await pool.calculatePotentialReward(
-        zoinks.address, owner.address, 86400
-      );
+    () => it("Successful pause() execution", async () => {
+      // Pause from not the owner
+      await expect(pool.connect(alice).pause())
+        .to.be.revertedWith("Ownable: caller is not the owner");
+      // Pause from the owner
+      await pool.pause();
+      // Attempt to call
+      await expect(pool.stake(100)).to.be.revertedWith("Pausable: paused");
+    }),
+  
+    () => it("Successful unpause() execution", async () => {
+      // Pause from not the owner
+      await expect(pool.connect(alice).pause())
+        .to.be.revertedWith("Ownable: caller is not the owner");
+      // Pause from the owner
+      await pool.pause();
+      // Attempt to call
+      await expect(pool.stake(100)).to.be.revertedWith("Pausable: paused");
+      // Unpause from not the owner
+      await expect(pool.connect(alice).unpause())
+        .to.be.revertedWith("Ownable: caller is not the owner");
+      // Unpause from the owner
+      await pool.unpause();
+      // Attempt to call
+      const amountToStake = ethers.utils.parseEther("1");
+      await stakingTokenMintingAction(owner.address, amountToStake, lpToken);
+      await lpToken.approve(pool.address, amountToStake);
+      await pool.stake(amountToStake);
     })
 
   ];

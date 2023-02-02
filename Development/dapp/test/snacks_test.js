@@ -1,54 +1,49 @@
 const { expect } = require("chai");
-const { ethers, deployments } = require("hardhat");
+const hre = require("hardhat");
+const { ethers, deployments } = hre;
 const { ZERO } = require("../deploy/helpers");
 const snacksBaseTestSuite = require('../reusable_test_suits/snacks_base_test_suite.js');
 
 describe("Snacks", () => {
 
+  // Signers
   let owner;
-  let buyer1;
-  let buyer2;
-  let buyer3;
-  let buyer4;
-  let buyer5;
-  let seller;
 
+  // Contracts
   let zoinks;
   let snacks;
-  let seniorage;
-  let pulse;
   let busd;
 
   beforeEach(async () => {
     await deployments.fixture(['snacks_test_fixtures']);
-    [
-      owner,
-      buyer1,
-      buyer2,
-      buyer3,
-      buyer4,
-      buyer5,
-      seller
-    ] = await ethers.getSigners();
+    [owner, authority, bob] = await ethers.getSigners();
     zoinks = await ethers.getContractAt(
-      "Zoinks",
-      (await deployments.get("Zoinks")).address
-    );
-    seniorage = await ethers.getContractAt(
-      "Seniorage",
-      (await deployments.get("Seniorage")).address
-    );
-    pulse = await ethers.getContractAt(
-      "Pulse",
-      (await deployments.get("Pulse")).address
+      hre.names.internal.zoinks,
+      (await deployments.get(hre.names.internal.zoinks)).address
     );
     snacks = await ethers.getContractAt(
-      "Snacks",
-      (await deployments.get("Snacks")).address
+      hre.names.internal.snacks,
+      (await deployments.get(hre.names.internal.snacks)).address
+    );
+    btcSnacks = await ethers.getContractAt(
+      hre.names.internal.btcSnacks,
+      (await deployments.get(hre.names.internal.btcSnacks)).address
+    );
+    ethSnacks = await ethers.getContractAt(
+      hre.names.internal.ethSnacks,
+      (await deployments.get(hre.names.internal.ethSnacks)).address
     );
     busd = await ethers.getContractAt(
-      "MockToken",
-      (await deployments.get("BUSD")).address
+      hre.names.internal.mockToken,
+      (await deployments.get(hre.names.external.tokens.busd)).address
+    );
+    btc = await ethers.getContractAt(
+      hre.names.internal.mockToken,
+      (await deployments.get(hre.names.external.tokens.btc)).address
+    );
+    eth = await ethers.getContractAt(
+      hre.names.internal.mockToken,
+      (await deployments.get(hre.names.external.tokens.eth)).address
     );
   });
 
@@ -62,15 +57,15 @@ describe("Snacks", () => {
   }
 
   const testCases = snacksBaseTestSuite(
-    [1, 2, 3, 4, 5, 6],
+    [1, 2, 3, 4, 5, 6, 9, 10],
     async () => await ethers.getContractAt(
-        "Snacks",
-        (await deployments.get("Snacks")).address
-      ),
+      hre.names.internal.snacks,
+      (await deployments.get(hre.names.internal.snacks)).address
+    ),
     async () => await ethers.getContractAt(
-        "Zoinks",
-        (await deployments.get("Zoinks")).address
-      ),
+      hre.names.internal.zoinks,
+      (await deployments.get(hre.names.internal.zoinks)).address
+    ),
     payTokenMintingAction
   );
 
@@ -81,18 +76,35 @@ describe("Snacks", () => {
   testCases[2](ethers.BigNumber.from('7000015000000000000'));
 
   // 4. Check how many <token> we need to return for 4.75 of total 5 <any>Snacks
-  // testCases[3](ethers.BigNumber.from('14843750000000'));
+  testCases[3](ethers.BigNumber.from('15009537823560035'));
 
   // 5. Check how many <token> we need to return for 6 of total 7 <any>Snacks
-  // testCases[4](ethers.BigNumber.from('27000000000000'));
+  testCases[4](ethers.BigNumber.from('22431944521089576'));
 
-  // // 6. Redeem 4.75 <any>Snacks and get <token>. And check undistributed 5% mintWithBuyTokenAmount + 10% redeem fee 0.50 <any>Snacks
-  // testCases[5](
-  //   ethers.BigNumber.from('15000000000000'),
-  //   ethers.BigNumber.from('14374687500000')
-  // );
+  // 6. Redeem 4.75 <any>Snacks and get <token>. And check undistributed 5% mintWithBuyTokenAmount + 10% redeem fee 0.50 <any>Snacks
+  testCases[5](
+    ethers.BigNumber.from('15000000000000'),
+    ethers.BigNumber.from('14374687500000')
+  );
 
-  it("10. Check how many Snacks we mint, with 0.000015 Zoinks", async () => {
+  // 9. First we have 5 buyers of <any>Snacks, then distribute undistributed fee
+  testCases[6](
+    ethers.BigNumber.from('15000000000000'),
+    ethers.BigNumber.from('40000000000000'),
+    ethers.BigNumber.from('65000000000000'),
+    ethers.BigNumber.from('90000000000000'),
+    ethers.BigNumber.from('115000000000000'),
+    ethers.utils.parseEther('0.4375'),
+    ZERO,
+    ethers.utils.parseEther('0.08125'),
+    ethers.BigNumber.from('100000000000000000')
+  );
+
+  testCases[9]("SNACK");
+
+  testCases[10]("Snacks");
+
+  it("15. Check how many Snacks we mint, with 0.000015 Zoinks", async () => {
     // ACT
     const amountZoinksToSpend = ethers.utils.parseEther('0.000015');
     const snacksResult = await snacks.calculateBuyTokenAmountOnMint(amountZoinksToSpend);
@@ -102,7 +114,7 @@ describe("Snacks", () => {
     expect(snacksResult).to.be.equal(snacksExpected);
   });
 
-  it("11. Check how many Snacks we mint, with 1 Zoinks and 5 Snacks already minted", async () => {
+  it("16. Check how many Snacks we mint, with 1 Zoinks and 5 Snacks already minted", async () => {
     // Current price
     const amountSnacksToMint = ethers.utils.parseEther('5');
 
@@ -125,7 +137,7 @@ describe("Snacks", () => {
     expect(snacksResult.mul(95).div(100)).to.be.equal(snacksExpected);
   });
 
-  it("12. Check big number os Zoinks to mintWithBuyTokenAmount Snacks calculation of TOTAL to mintWithBuyTokenAmount", async () => {
+  it("17. Check big number os Zoinks to mintWithBuyTokenAmount Snacks calculation of TOTAL to mintWithBuyTokenAmount", async () => {
     // ACT
     const amountZoinksToSpend = ethers.BigNumber.from("50055015000000000000"); // 50.055015
     const currentTotalSupply = ethers.utils.parseEther('5');
@@ -139,7 +151,7 @@ describe("Snacks", () => {
     expect(snacksResult).to.be.closeTo(snacksExpected, '1500000000000000');
   });
 
-  it("13. Check very big number os Zoinks to mintWithBuyTokenAmount Snacks calculation of TOTAL to mintWithBuyTokenAmount", async () => {
+  it("18. Check very big number os Zoinks to mintWithBuyTokenAmount Snacks calculation of TOTAL to mintWithBuyTokenAmount", async () => {
     // ACT
     // Max zoinks to spend: 8361,00
     // Max snacks to mint: 129313
@@ -153,4 +165,196 @@ describe("Snacks", () => {
     // ASSERT
     expect(snacksResult).to.be.closeTo(snacksExpected, '72400000000000000');
   });
+
+  it("19. Successful notifyBtcSnacksAmount() execution", async () => {
+    // Call from not the BtcSnacks contract
+    await expect(snacks.notifyBtcSnacksFeeAmount(0)).to.be.revertedWith("Snacks: caller is not the BtcSnacks contract");
+    // Call from the right address
+    await snacks.configure(
+      owner.address,
+      owner.address,
+      owner.address,
+      owner.address,
+      owner.address,
+      owner.address,
+      owner.address,
+      owner.address,
+      owner.address,
+      owner.address
+    );
+    // Check
+    await expect(snacks.notifyBtcSnacksFeeAmount(100))
+      .to.emit(snacks, "BtcSnacksFeeAdded")
+      .withArgs(100);
+  });
+
+  it("20. Successful notifyEthSnacksAmount() execution", async () => {
+    // Call from not the BtcSnacks contract
+    await expect(snacks.notifyEthSnacksFeeAmount(0)).to.be.revertedWith("Snacks: caller is not the EthSnacks contract");
+    // Call from the right address
+    await snacks.configure(
+      owner.address,
+      owner.address,
+      owner.address,
+      owner.address,
+      owner.address,
+      owner.address,
+      owner.address,
+      owner.address,
+      owner.address,
+      
+      owner.address
+    );
+    // Check
+    await expect(snacks.notifyEthSnacksFeeAmount(100))
+      .to.emit(snacks, "EthSnacksFeeAdded")
+      .withArgs(100);
+  });
+
+  it("21. Successful withdrawBtcSnacks() execution (without offset)", async () => {
+    const buyAmount = ethers.utils.parseEther("100");
+    // Buying BtcSnacks
+    await btc.approve(btcSnacks.address, buyAmount);
+    await btcSnacks.mintWithPayTokenAmount(buyAmount);
+    // Buying EthSnacks
+    await eth.approve(ethSnacks.address, buyAmount);
+    await ethSnacks.mintWithPayTokenAmount(buyAmount);
+    // Buying Zoinks and Snacks
+    await busd.approve(zoinks.address, buyAmount);
+    await zoinks.mint(buyAmount);
+    await zoinks.approve(snacks.address, buyAmount);
+    await snacks.mintWithPayTokenAmount(buyAmount);
+    // Distribute fee
+    await btcSnacks.connect(authority).distributeFee();
+    await ethSnacks.connect(authority).distributeFee();
+    await snacks.connect(authority).distributeFee();
+    // Withdraw BtcSnacks from Snacks contract
+    const balanceBefore = await btcSnacks.balanceOf(owner.address);
+    const response = await snacks["getPendingBtcSnacks()"]();
+    const balanceExpected = balanceBefore.add(response[1]);
+    await snacks["withdrawBtcSnacks()"]();
+    await snacks["withdrawBtcSnacks()"]();
+    expect(await btcSnacks.balanceOf(owner.address)).to.equal(balanceExpected);
+  });
+
+  it("23. Successful withdrawBtcSnacks() execution (with offset)", async () => {
+    const buyAmount = ethers.utils.parseEther("100");
+    // Buying BtcSnacks
+    await btc.approve(btcSnacks.address, buyAmount);
+    await btcSnacks.mintWithPayTokenAmount(buyAmount);
+    // Buying EthSnacks
+    await eth.approve(ethSnacks.address, buyAmount);
+    await ethSnacks.mintWithPayTokenAmount(buyAmount);
+    // Buying Zoinks and Snacks
+    await busd.approve(zoinks.address, buyAmount);
+    await zoinks.mint(buyAmount);
+    await zoinks.approve(snacks.address, buyAmount);
+    await snacks.mintWithPayTokenAmount(buyAmount);
+    // Distribute fee
+    await btcSnacks.connect(authority).distributeFee();
+    await ethSnacks.connect(authority).distributeFee();
+    await snacks.connect(authority).distributeFee();
+    // Withdraw BtcSnacks from Snacks contract
+    const balanceBefore = await btcSnacks.balanceOf(owner.address);
+    await expect(snacks["getPendingBtcSnacks(uint256)"](3)).to.be.revertedWith("Snacks: invalid offset");
+    const response = await snacks["getPendingBtcSnacks(uint256)"](1);
+    const balanceExpected = balanceBefore.add(response[1]);
+    await snacks["withdrawBtcSnacks(uint256)"](1);
+    expect(await btcSnacks.balanceOf(owner.address)).to.equal(balanceExpected);
+  });
+
+  it("24. Successful withdrawEthSnacks() execution (without offset)", async () => {
+    const buyAmount = ethers.utils.parseEther("100");
+    // Buying BtcSnacks
+    await btc.approve(btcSnacks.address, buyAmount);
+    await btcSnacks.mintWithPayTokenAmount(buyAmount);
+    // Buying EthSnacks
+    await eth.approve(ethSnacks.address, buyAmount);
+    await ethSnacks.mintWithPayTokenAmount(buyAmount);
+    // Buying Zoinks and Snacks
+    await busd.approve(zoinks.address, buyAmount);
+    await zoinks.mint(buyAmount);
+    await zoinks.approve(snacks.address, buyAmount);
+    await snacks.mintWithPayTokenAmount(buyAmount);
+    // Distribute fee
+    await btcSnacks.connect(authority).distributeFee();
+    await ethSnacks.connect(authority).distributeFee();
+    await snacks.connect(authority).distributeFee();
+    // Withdraw BtcSnacks from Snacks contract
+    const balanceBefore = await ethSnacks.balanceOf(owner.address);
+    const response = await snacks["getPendingEthSnacks()"]();
+    const balanceExpected = balanceBefore.add(response[1]);
+    await snacks["withdrawEthSnacks()"]();
+    await snacks["withdrawEthSnacks()"]();
+    expect(await ethSnacks.balanceOf(owner.address)).to.equal(balanceExpected);
+  });
+
+  it("25. Successful withdrawEthSnacks() execution (with offset)", async () => {
+    const buyAmount = ethers.utils.parseEther("100");
+    // Buying BtcSnacks
+    await btc.approve(btcSnacks.address, buyAmount);
+    await btcSnacks.mintWithPayTokenAmount(buyAmount);
+    // Buying EthSnacks
+    await eth.approve(ethSnacks.address, buyAmount);
+    await ethSnacks.mintWithPayTokenAmount(buyAmount);
+    // Buying Zoinks and Snacks
+    await busd.approve(zoinks.address, buyAmount);
+    await zoinks.mint(buyAmount);
+    await zoinks.approve(snacks.address, buyAmount);
+    await snacks.mintWithPayTokenAmount(buyAmount);
+    // Distribute fee
+    await btcSnacks.connect(authority).distributeFee();
+    await ethSnacks.connect(authority).distributeFee();
+    await snacks.connect(authority).distributeFee();
+    // Withdraw BtcSnacks from Snacks contract
+    const balanceBefore = await ethSnacks.balanceOf(owner.address);
+    await expect(snacks["getPendingEthSnacks(uint256)"](3)).to.be.revertedWith("Snacks: invalid offset");
+    const response = await snacks["getPendingEthSnacks(uint256)"](1);
+    const balanceExpected = balanceBefore.add(response[1]);
+    await snacks["withdrawEthSnacks(uint256)"](1);
+    expect(await ethSnacks.balanceOf(owner.address)).to.equal(balanceExpected);
+  });
+
+  it("26. Successful balanceAndDepositOfAt() execution", async () => {
+    const buyAmount = ethers.utils.parseEther("100");
+    // Buying Zoinks and Snacks
+    await busd.approve(zoinks.address, buyAmount);
+    await zoinks.mint(buyAmount);
+    await zoinks.approve(snacks.address, buyAmount);
+    await snacks.mintWithPayTokenAmount(buyAmount);
+    await expect(snacks.balanceAndDepositOfAt(owner.address, 0)).to.be.revertedWith("Snacks: id is 0");
+    await expect(snacks.balanceAndDepositOfAt(owner.address, 1)).to.be.revertedWith("Snacks: nonexistent id");
+    // Distribute fee
+    await btcSnacks.connect(authority).distributeFee();
+    await ethSnacks.connect(authority).distributeFee();
+    await snacks.connect(authority).distributeFee();
+    // Check balance
+    expect(await snacks.balanceAndDepositOfAt(owner.address, 1)).to.equal(await snacks.balanceOf(owner.address));
+  });  
+
+  it("27. Successful snapshot updating", async () => {
+    const buyAmount = ethers.utils.parseEther("100");
+    // Buying Zoinks and Snacks
+    await busd.transfer(bob.address, buyAmount);
+    await busd.connect(bob).approve(zoinks.address, buyAmount);
+    await zoinks.connect(bob).mint(buyAmount);
+    await zoinks.connect(bob).approve(snacks.address, buyAmount);
+    await snacks.connect(bob).mintWithPayTokenAmount(buyAmount);
+    // Distribute fee
+    await btcSnacks.connect(authority).distributeFee();
+    await ethSnacks.connect(authority).distributeFee();
+    await snacks.connect(authority).distributeFee();
+    // Transfers
+    let balance = await snacks.balanceOf(bob.address);
+    await snacks.connect(bob).transfer(owner.address, balance.div(2));
+    await snacks.connect(bob).transfer(authority.address, balance.div(2).sub(1));
+    balance = await snacks.balanceOf(bob.address);
+    // Distribute fee
+    await btcSnacks.connect(authority).distributeFee();
+    await ethSnacks.connect(authority).distributeFee();
+    await snacks.connect(authority).distributeFee();
+    expect(await snacks.balanceAndDepositOfAt(bob.address, 1)).to.equal(balance);
+    expect(await snacks.balanceAndDepositOfAt(bob.address, 2)).to.equal(3);
+  });
+  
 });

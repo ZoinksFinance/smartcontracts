@@ -1,57 +1,69 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.15;
 
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+import "@prb/math/contracts/PRBMathUD60x18.sol";
 
+import "./interfaces/ILunchBox.sol";
+import "./interfaces/ISnacksPool.sol";
+import "./interfaces/IMultipleRewardPool.sol";
 import "./interfaces/ISnacksBase.sol";
 import "./interfaces/IRouter.sol";
 
-/// @title Контракт, реализующий механизм risk free стейкинга.
-contract LunchBox is ReentrancyGuard, Ownable {
+contract LunchBox is ILunchBox, Ownable {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
+    using Counters for Counters.Counter;
+    using PRBMathUD60x18 for uint256;
     
     struct Recipient {
-        address destination;
-        uint256 percent;
+        address wallet;
+        uint256 percentage;
     }
     
-    uint256 constant private BASE_PERCENT = 10000;
+    uint256 private constant BASE_PERCENT = 10000;
     
     uint256 public rewardsDuration = 12 hours;
-    uint256 public totalSupply;
     uint256 public rewardPerTokenStored;
     uint256 public lastUpdateTime;
     uint256 public periodFinish;
     uint256 public rewardRate;
-    address public busd;
+    uint256 private _totalSupplyFactor = PRBMathUD60x18.fromUint(1);
+    address public immutable busd;
+    address public immutable btc;
+    address public immutable eth;
+    address public immutable router;
     address public zoinks;
-    address public btc;
-    address public eth;
     address public snacks;
     address public btcSnacks;
     address public ethSnacks;
     address public snacksPool;
     address public poolRewardDistributor;
     address public seniorage;
-    address public router;
+    Counters.Counter private _currentTotalSupplyFactorId;
     
-    mapping(address => uint256) public balances;
+    mapping(address => mapping(uint256 => bool)) private _adjusted;
     mapping(address => uint256) public rewards;
     mapping(address => uint256) public userRewardPerTokenPaid;
-    mapping(address => uint256) public userZoinksAmountStored;
-    mapping(address => uint256) public userSnacksAmountStored;
-    mapping(address => uint256) public userBtcSnacksAmountStored;
-    mapping(address => uint256) public userEthSnacksAmountStored;
+    mapping(address => uint256) public zoinksAmountStoredFor;
+    mapping(address => uint256) public snacksAmountStoredFor;
+    mapping(address => uint256) public btcSnacksAmountStoredFor;
+    mapping(address => uint256) public ethSnacksAmountStoredFor;
     Recipient[] public recipients;
     
+    event TotalSupplyFactorUpdated(
+        uint256 indexed totalSupplyFactor, 
+        uint256 indexed totalSupplyFactorId
+    );
     event RewardAdded(uint256 reward);
     event Staked(address indexed user, uint256 amount);
+    event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(address indexed user, uint256 reward);
     event RewardsDurationUpdated(uint256 newDuration);
+    event RecipientsUpdated(address[] indexed destinations, uint256[] percentages);
     
     modifier onlyPoolRewardDistributor {
         require(
@@ -76,21 +88,34 @@ contract LunchBox is ReentrancyGuard, Ownable {
         );
         _;
     }
+
+    modifier onlySnacks {
+        require(
+            msg.sender == snacks,
+            "LunchBox: caller is not the Snacks contract"
+        );
+        _;
+    }
     
     modifier updateReward(address user_) {
         rewardPerTokenStored = rewardPerToken();
         lastUpdateTime = lastTimeRewardApplicable();
         if (user_ != address(0)) {
             rewards[user_] = earned(user_);
+            if (!_adjusted[user_][_currentTotalSupplyFactorId.current()]) {
+                _adjusted[user_][_currentTotalSupplyFactorId.current()] = true;
+            }
             userRewardPerTokenPaid[user_] = rewardPerTokenStored;
         }
         _;
     }
     
-    /// @param busd_ Адрес BUSD токена.
-    /// @param btc_ Адрес BTC токена.
-    /// @param eth_ Адрес ETH токена.
-    /// @param router_ Адрес PancakeSwap роутера.
+    /**
+    * @param busd_ Binance-Peg BUSD token address.
+    * @param btc_ Binance-Peg BTCB token address.
+    * @param eth_ Binance-Peg Ethereum token address.
+    * @param router_ Router contract address (from PancakeSwap DEX).
+    */
     constructor(
         address busd_,
         address btc_,
@@ -107,17 +132,15 @@ contract LunchBox is ReentrancyGuard, Ownable {
     }
     
     /**
-    * @notice Функция, реализующая логику установки адресов или их переустановки
-    * в случае редеплоя контрактов.
-    * @dev Если редеплоится какой-то один контракт, то на место тех адресов,
-    * которые не редеплоились, передаются старые значения.
-    * @param zoinks_ Адрес ZOINKS токена.
-    * @param snacks_ Адрес SNACKS токена.
-    * @param btcSnacks_ Адрес BTCSNACKS токена.
-    * @param ethSnacks_ Адрес ETHSNACKS токена.
-    * @param snacksPool_ Адрес контракта SnacksPool.
-    * @param poolRewardDistributor_ Адрес контракта PoolRewardDistributor.
-    * @param seniorage_ Адрес контракта Seniorage.
+    * @notice Configures the contract.
+    * @dev Could be called by the owner in case of resetting addresses.
+    * @param zoinks_ Zoinks token address.
+    * @param snacks_ Snacks token address.
+    * @param btcSnacks_ BtcSnacks token address.
+    * @param ethSnacks_ EthSnacks token address.
+    * @param snacksPool_ SnacksPool contract address.
+    * @param poolRewardDistributor_ PoolRewardDistributor contract address.
+    * @param seniorage_ Seniorage contract address.
     */
     function configure(
         address zoinks_,
@@ -151,48 +174,67 @@ contract LunchBox is ReentrancyGuard, Ownable {
             IERC20(ethSnacks_).approve(ethSnacks_, type(uint256).max);
         }
     }
+
+    /**
+    * @notice Updates total supply factor and increments its id.
+    * @dev Adjusts `rewardPerTokenStored` and `userRewardPerTokenPaid` to the correct values 
+    * after increasing the deposits of non-excluded holders.
+    * @param totalSupplyBefore_ Total supply before new adjustment factor value in the Snacks contract.
+    */
+    function updateTotalSupplyFactor(uint256 totalSupplyBefore_) external onlySnacks {
+        if (totalSupplyBefore_ != 0) {
+            uint256 totalSupply = ISnacksPool(snacksPool).getLunchBoxParticipantsTotalSupply();
+            _totalSupplyFactor = totalSupply.div(totalSupplyBefore_);
+            rewardPerTokenStored = rewardPerTokenStored.div(_totalSupplyFactor);
+            _currentTotalSupplyFactorId.increment();
+            emit TotalSupplyFactorUpdated(
+                _totalSupplyFactor,
+                _currentTotalSupplyFactorId.current()
+            );
+        }
+    }
     
     /**
-    * @notice Функция, реализующая логику установки получателей BUSD
-    * токенов внутри всех стейк функций.
-    * @param destinations_ Адреса получателей.
-    * @param percents_ Проценты получателей от общего числа распределяемых BUSD токенов.
+    * @notice Sets recipients of Binance-Peg BUSD token.
+    * @dev Sum of recipient percentages must be equal to 100%.
+    * @param wallets_ Recipient addresses.
+    * @param percentages_ Recipient percentages.
     */
     function setRecipients(
-        address[] memory destinations_,
-        uint256[] memory percents_
+        address[] memory wallets_,
+        uint256[] memory percentages_
     )
         external
         onlyOwner
     {
-        uint256 length = percents_.length;
+        uint256 length = percentages_.length;
         require(
-            destinations_.length == length &&
+            wallets_.length == length &&
             length != 0,
             "LunchBox: invalid array lengths"
         );
         uint256 sum;
         for (uint256 i = 0; i < length; i++) {
-            sum += percents_[i];
+            sum += percentages_[i];
         }
         require(
             sum == BASE_PERCENT,
-            "LunchBox: invalid percents sum"
+            "LunchBox: invalid sum of percentages"
         );
         delete recipients;
         for (uint256 i = 0; i < length; i++) {
             Recipient memory recipient;
-            recipient.destination = destinations_[i];
-            recipient.percent = percents_[i];
+            recipient.wallet = wallets_[i];
+            recipient.percentage = percentages_[i];
             recipients.push(recipient);
         }
+        emit RecipientsUpdated(wallets_, percentages_);
     }
 
     /**
-    * @notice Функция, реализующая логику переустановки `rewardsDuration`.
-    * @dev Функция может быть вызвана только владельцем контракта
-    * и не раньше срока окончания `periodFinish`.
-    * @param rewardsDuration_ Новое значение для `rewardsDuration` в секундах.
+    * @notice Sets rewards duration.
+    * @dev The logic is derived from the StakingRewards contract.
+    * @param rewardsDuration_ New rewards duration value.
     */
     function setRewardsDuration(uint256 rewardsDuration_) external onlyOwner {
         require(
@@ -203,14 +245,15 @@ contract LunchBox is ReentrancyGuard, Ownable {
         emit RewardsDurationUpdated(rewardsDuration);
     }
     
-    /// @notice Функция, реализующая логику стейкинга.
-    /// @dev Может быть вызвана только контрактом Seniorage.
-    /// @param busdAmount_ Количество BUSD токенов для стейка.
-    function stake(
+    /**
+    * @notice Deposits Binance-Peg BUSD tokens for the Seniorage contract.
+    * @dev Called by the Seniorage contract once every 12 hours.
+    * @param busdAmount_ Amount of Binance-Peg BUSD tokens to deposit.
+    */
+    function stakeForSeniorage(
         uint256 busdAmount_
     )
         external
-        nonReentrant
         onlySeniorage
         updateReward(address(0))
     {
@@ -218,32 +261,42 @@ contract LunchBox is ReentrancyGuard, Ownable {
             IERC20(busd).safeTransferFrom(msg.sender, address(this), busdAmount_);
             for (uint256 i = 0; i < recipients.length; i++) {
                 IERC20(busd).safeTransfer(
-                    recipients[i].destination,
-                    busdAmount_ * recipients[i].percent / BASE_PERCENT
+                    recipients[i].wallet,
+                    busdAmount_ * recipients[i].percentage / BASE_PERCENT
                 );
             }
         }
         emit Staked(msg.sender, busdAmount_);
     }
     
-    /// @notice Функция, реализующая логику стейкинга.
-    /// @dev Может быть вызвана только контрактом Seniorage.
-    /// @param zoinksAmount_ Количество ZOINKS токенов для стейка.
-    /// @param btcAmount_ Количество BTC токенов для стейка.
-    /// @param ethAmount_ Количество ETH токенов для стейка.
-    /// @param snacksAmount_ Количество SNACKS токенов для стейка.
-    /// @param btcSnacksAmount_ Количество BTCSNACKS токенов для стейка.
-    /// @param ethSnacksAmount_ Количество ETHSNACKS токенов для стейка.
-    function stake(
+    /**
+    * @notice Deposits tokens for the Seniorage contract.
+    * @dev Called by the Seniorage contract once every 12 hours.
+    * @param zoinksAmount_ Amount of Zoinks tokens to deposit.
+    * @param btcAmount_ Amount of Binance-Peg BTCB tokens to deposit.
+    * @param ethAmount_ Amount of Binance-Peg Ethereum tokens to deposit.
+    * @param snacksAmount_ Amount of Snacks tokens to deposit.
+    * @param btcSnacksAmount_ Amount of BtcSnacks tokens to deposit.
+    * @param ethSnacksAmount_ Amount of EthSnacks tokens to deposit.
+    * @param zoinksBusdAmountOutMin_ The minimal amount of tokens (slippage tolerance) for 
+    * Zoinks token to Binance-Peg BUSD token swap.
+    * @param btcBusdAmountOutMin_ The minimal amount of tokens (slippage tolerance) for 
+    * Binance-Peg BTCB token to Binance-Peg BUSD token swap.
+    * @param ethBusdAmountOutMin_ The minimal amount of tokens (slippage tolerance) for 
+    * Binance-Peg Ethereum token to Binance-Peg BUSD token swap.
+    */
+    function stakeForSeniorage(
         uint256 zoinksAmount_,
         uint256 btcAmount_,
         uint256 ethAmount_,
         uint256 snacksAmount_,
         uint256 btcSnacksAmount_,
-        uint256 ethSnacksAmount_
+        uint256 ethSnacksAmount_,
+        uint256 zoinksBusdAmountOutMin_,
+        uint256 btcBusdAmountOutMin_,
+        uint256 ethBusdAmountOutMin_
     )
         external
-        nonReentrant
         onlySeniorage
         updateReward(address(0))
     {
@@ -258,38 +311,41 @@ contract LunchBox is ReentrancyGuard, Ownable {
         }
         if (snacksAmount_ != 0) {
             IERC20(snacks).safeTransferFrom(msg.sender, address(this), snacksAmount_);
-            uint256 snacksAmountToRedeem = snacksAmount_ + userSnacksAmountStored[msg.sender];
+            uint256 snacksAmountToRedeem = snacksAmount_ + snacksAmountStoredFor[msg.sender];
             if (ISnacksBase(snacks).sufficientBuyTokenAmountOnRedeem(snacksAmountToRedeem)) {
+                // Return value is ignored.
                 ISnacksBase(snacks).redeem(snacksAmountToRedeem);
-                if (userSnacksAmountStored[msg.sender] != 0) {
-                    userSnacksAmountStored[msg.sender] = 0;
+                if (snacksAmountStoredFor[msg.sender] != 0) {
+                    snacksAmountStoredFor[msg.sender] = 0;
                 }
             } else {
-                userSnacksAmountStored[msg.sender] += snacksAmount_;
+                snacksAmountStoredFor[msg.sender] += snacksAmount_;
             }
         }
         if (btcSnacksAmount_ != 0) {
             IERC20(btcSnacks).safeTransferFrom(msg.sender, address(this), btcSnacksAmount_);
-            uint256 btcSnacksAmountToRedeem = btcSnacksAmount_ + userBtcSnacksAmountStored[msg.sender];
+            uint256 btcSnacksAmountToRedeem = btcSnacksAmount_ + btcSnacksAmountStoredFor[msg.sender];
             if (ISnacksBase(btcSnacks).sufficientBuyTokenAmountOnRedeem(btcSnacksAmountToRedeem)) {
+                // Return value is ignored.
                 ISnacksBase(btcSnacks).redeem(btcSnacksAmountToRedeem);
-                if (userBtcSnacksAmountStored[msg.sender] != 0) {
-                    userBtcSnacksAmountStored[msg.sender] = 0;
+                if (btcSnacksAmountStoredFor[msg.sender] != 0) {
+                    btcSnacksAmountStoredFor[msg.sender] = 0;
                 }
             } else {
-                userBtcSnacksAmountStored[msg.sender] += btcSnacksAmount_;
+                btcSnacksAmountStoredFor[msg.sender] += btcSnacksAmount_;
             }
         }
         if (ethSnacksAmount_ != 0) {
             IERC20(ethSnacks).safeTransferFrom(msg.sender, address(this), ethSnacksAmount_);
-            uint256 ethSnacksAmountToRedeem = ethSnacksAmount_ + userEthSnacksAmountStored[msg.sender];
+            uint256 ethSnacksAmountToRedeem = ethSnacksAmount_ + ethSnacksAmountStoredFor[msg.sender];
             if (ISnacksBase(ethSnacks).sufficientBuyTokenAmountOnRedeem(ethSnacksAmountToRedeem)) {
+                // Return value is ignored.
                 ISnacksBase(ethSnacks).redeem(ethSnacksAmountToRedeem);
-                if (userEthSnacksAmountStored[msg.sender] != 0) {
-                    userEthSnacksAmountStored[msg.sender] = 0;
+                if (ethSnacksAmountStoredFor[msg.sender] != 0) {
+                    ethSnacksAmountStoredFor[msg.sender] = 0;
                 }
             } else {
-                userEthSnacksAmountStored[msg.sender] += ethSnacksAmount_;
+                ethSnacksAmountStoredFor[msg.sender] += ethSnacksAmount_;
             }
         }
         uint256 busdAmount;
@@ -301,10 +357,10 @@ contract LunchBox is ReentrancyGuard, Ownable {
             path[0] = zoinks;
             amounts = IRouter(router).swapExactTokensForTokens(
                 zoinksBalance,
-                0,
+                zoinksBusdAmountOutMin_,
                 path,
                 address(this),
-                block.timestamp + 15
+                block.timestamp
             );
             busdAmount += amounts[1];
         }
@@ -313,10 +369,10 @@ contract LunchBox is ReentrancyGuard, Ownable {
             path[0] = btc;
             amounts = IRouter(router).swapExactTokensForTokens(
                 btcBalance,
-                0,
+                btcBusdAmountOutMin_,
                 path,
                 address(this),
-                block.timestamp + 15
+                block.timestamp
             );
             busdAmount += amounts[1];
         }
@@ -325,40 +381,49 @@ contract LunchBox is ReentrancyGuard, Ownable {
             path[0] = eth;
             amounts = IRouter(router).swapExactTokensForTokens(
                 ethBalance,
-                0,
+                ethBusdAmountOutMin_,
                 path,
                 address(this),
-                block.timestamp + 15
+                block.timestamp
             );
             busdAmount += amounts[1];
         }
         if (busdAmount != 0) {
             for (uint256 i = 0; i < recipients.length; i++) {
                 IERC20(busd).safeTransfer(
-                    recipients[i].destination,
-                    busdAmount * recipients[i].percent / BASE_PERCENT
+                    recipients[i].wallet,
+                    busdAmount * recipients[i].percentage / BASE_PERCENT
                 );
             }
         }
         emit Staked(msg.sender, busdAmount);
     }
     
-    /// @notice Функция, реализующая логику стейкинга.
-    /// @dev Может быть вызвана только контрактом SnacksPool.
-    /// @param user_ Адрес пользователя.
-    /// @param snacksAmount_ Количество SNACKS токенов для стейка.
-    /// @param btcSnacksAmount_ Количество BTCSNACKS токенов для стейка.
-    /// @param ethSnacksAmount_ Количество ETHSNACKS токенов для стейка.
-    function stake(
-        address user_,
+    /**
+    * @notice Deposits tokens for all participants.
+    * @dev Mind that the function updates time variables through `updateReward` modifier.
+    * Called by the SnacksPool contract once every 12 hours.
+    * @param snacksAmount_ Amount of Snacks tokens to deposit.
+    * @param btcSnacksAmount_ Amount of BtcSnacks tokens to deposit.
+    * @param ethSnacksAmount_ Amount of EthSnacks tokens to deposit.
+    * @param zoinksBusdAmountOutMin_ The minimal amount of tokens (slippage tolerance) for 
+    * Zoinks token to Binance-Peg BUSD token swap.
+    * @param btcBusdAmountOutMin_ The minimal amount of tokens (slippage tolerance) for 
+    * Binance-Peg BTCB token to Binance-Peg BUSD token swap.
+    * @param ethBusdAmountOutMin_ The minimal amount of tokens (slippage tolerance) for 
+    * Binance-Peg Ethereum token to Binance-Peg BUSD token swap.
+    */
+    function stakeForSnacksPool(
         uint256 snacksAmount_,
         uint256 btcSnacksAmount_,
-        uint256 ethSnacksAmount_
+        uint256 ethSnacksAmount_,
+        uint256 zoinksBusdAmountOutMin_,
+        uint256 btcBusdAmountOutMin_,
+        uint256 ethBusdAmountOutMin_
     )
         external
-        nonReentrant
         onlySnacksPool
-        updateReward(user_)
+        updateReward(address(0))
     {
         uint256 busdAmount;
         address[] memory path = new address[](2);
@@ -366,94 +431,124 @@ contract LunchBox is ReentrancyGuard, Ownable {
         uint256[] memory amounts = new uint256[](2);
         if (snacksAmount_ != 0) {
             IERC20(snacks).safeTransferFrom(msg.sender, address(this), snacksAmount_);
-            uint256 snacksAmountToRedeem = snacksAmount_ + userSnacksAmountStored[user_];
+            uint256 snacksAmountToRedeem = snacksAmount_ + snacksAmountStoredFor[msg.sender];
             if (ISnacksBase(snacks).sufficientBuyTokenAmountOnRedeem(snacksAmountToRedeem)) {
                 uint256 zoinksAmount = ISnacksBase(snacks).redeem(snacksAmountToRedeem);
                 path[0] = zoinks;
                 amounts = IRouter(router).swapExactTokensForTokens(
                     zoinksAmount,
-                    0,
+                    zoinksBusdAmountOutMin_,
                     path,
                     address(this),
-                    block.timestamp + 15
+                    block.timestamp
                 );
                 busdAmount += amounts[1];
-                if (userSnacksAmountStored[user_] != 0) {
-                    userSnacksAmountStored[user_] = 0;
+                if (snacksAmountStoredFor[msg.sender] != 0) {
+                    snacksAmountStoredFor[msg.sender] = 0;
                 }
             } else {
-                userSnacksAmountStored[user_] += snacksAmount_;
+                snacksAmountStoredFor[msg.sender] += snacksAmount_;
             }
         }
         if (btcSnacksAmount_ != 0) {
             IERC20(btcSnacks).safeTransferFrom(msg.sender, address(this), btcSnacksAmount_);
-            uint256 btcSnacksAmountToRedeem = btcSnacksAmount_ + userBtcSnacksAmountStored[user_];
+            uint256 btcSnacksAmountToRedeem = btcSnacksAmount_ + btcSnacksAmountStoredFor[msg.sender];
             if (ISnacksBase(btcSnacks).sufficientBuyTokenAmountOnRedeem(btcSnacksAmountToRedeem)) {
                 uint256 btcAmount = ISnacksBase(btcSnacks).redeem(btcSnacksAmountToRedeem);
                 path[0] = btc;
                 amounts = IRouter(router).swapExactTokensForTokens(
                     btcAmount,
-                    0,
+                    btcBusdAmountOutMin_,
                     path,
                     address(this),
-                    block.timestamp + 15
+                    block.timestamp
                 );
                 busdAmount += amounts[1];
-                if (userBtcSnacksAmountStored[user_] != 0) {
-                    userBtcSnacksAmountStored[user_] = 0;
+                if (btcSnacksAmountStoredFor[msg.sender] != 0) {
+                    btcSnacksAmountStoredFor[msg.sender] = 0;
                 }
             } else {
-                userBtcSnacksAmountStored[user_] += btcSnacksAmount_;
+                btcSnacksAmountStoredFor[msg.sender] += btcSnacksAmount_;
             }
         }
         if (ethSnacksAmount_ != 0) {
             IERC20(ethSnacks).safeTransferFrom(msg.sender, address(this), ethSnacksAmount_);
-            uint256 ethSnacksAmountToRedeem = ethSnacksAmount_ + userEthSnacksAmountStored[user_];
+            uint256 ethSnacksAmountToRedeem = ethSnacksAmount_ + ethSnacksAmountStoredFor[msg.sender];
             if (ISnacksBase(ethSnacks).sufficientBuyTokenAmountOnRedeem(ethSnacksAmountToRedeem)) {
                 uint256 ethAmount = ISnacksBase(ethSnacks).redeem(ethSnacksAmountToRedeem);
                 path[0] = eth;
                 amounts = IRouter(router).swapExactTokensForTokens(
                     ethAmount,
-                    0,
+                    ethBusdAmountOutMin_,
                     path,
                     address(this),
-                    block.timestamp + 15
+                    block.timestamp
                 );
                 busdAmount += amounts[1];
-                if (userEthSnacksAmountStored[user_] != 0) {
-                    userEthSnacksAmountStored[user_] = 0;
+                if (ethSnacksAmountStoredFor[msg.sender] != 0) {
+                    ethSnacksAmountStoredFor[msg.sender] = 0;
                 }
             } else {
-                userEthSnacksAmountStored[user_] += ethSnacksAmount_;
+                ethSnacksAmountStoredFor[msg.sender] += ethSnacksAmount_;
             }
         }
         if (busdAmount != 0) {
-            totalSupply += busdAmount;
-            balances[user_] += busdAmount;
             for (uint256 i = 0; i < recipients.length; i++) {
                 IERC20(busd).safeTransfer(
-                    recipients[i].destination,
-                    busdAmount * recipients[i].percent / BASE_PERCENT
+                    recipients[i].wallet,
+                    busdAmount * recipients[i].percentage / BASE_PERCENT
                 );
             }
         }
-        emit Staked(user_, busdAmount);
+        emit Staked(msg.sender, busdAmount);
     }
-    
-    /// @notice Функция, реализующая логику выхода из LunchBox контракта.
-    /// @dev Может быть вызвана только контрактом SnacksPool.
-    /// @param user_ Адрес пользователя.
-    function exit(address user_) external onlySnacksPool {
-        totalSupply -= balances[user_];
-        balances[user_] = 0;
-        getReward(user_);
-    }
-    
+
     /**
-    * @notice Функция, реализующая логику уведомления стейкинг пула о пришедшей награде,
-    * а также пересчета скорости раздачи награды.
-    * @dev Функция может быть вызвана только контрактом PoolRewardDistributor раз в 12 часов.
-    * @param reward_ Размер награды.
+    * @notice Transfers rewards to the user.
+    * @dev Earned amount of Binance-Peg BUSD token is converted into Snacks token 
+    * and sent to the user if this amount is enough for conversion,
+    * otherwise earned tokens remain on the contract and continue to belong to the user 
+    * until this amount is enough for conversion. Could be called only by the SnacksPool contract. 
+    * @param user_ User address.
+    */
+    function getReward(
+        address user_
+    )
+        external
+        onlySnacksPool
+        updateReward(user_)
+    {
+        uint256 reward = rewards[user_];
+        if (reward > 0) {
+            rewards[user_] = 0;
+            address[] memory path = new address[](2);
+            path[0] = busd;
+            path[1] = zoinks;
+            uint256[] memory amounts = IRouter(router).swapExactTokensForTokens(
+                reward,
+                0,
+                path,
+                address(this),
+                block.timestamp
+            );
+            uint256 zoinksAmount = amounts[1] + zoinksAmountStoredFor[user_];
+            if (ISnacksBase(snacks).sufficientPayTokenAmountOnMint(zoinksAmount)) {
+                uint256 snacksAmount = ISnacksBase(snacks).mintWithPayTokenAmount(zoinksAmount);
+                IERC20(snacks).safeTransfer(user_, snacksAmount);
+                if (zoinksAmountStoredFor[user_] != 0) {
+                    zoinksAmountStoredFor[user_] = 0;
+                }
+                emit RewardPaid(user_, snacksAmount);
+            } else {
+                zoinksAmountStoredFor[user_] += amounts[1];
+            }
+        }
+    }
+        
+    /**
+    * @notice Notifies the contract of an incoming reward and recalculates the reward rate.
+    * @dev Called by the PoolRewardDistributor contract once every 12 hours.
+    * @param reward_ Reward amount.
     */
     function notifyRewardAmount(
         uint256 reward_
@@ -479,57 +574,24 @@ contract LunchBox is ReentrancyGuard, Ownable {
         emit RewardAdded(reward_);
     }
     
-    /// @notice Функция, реализующая логику снятия заработанной награды для пользователя.
-    /// @dev Функция может быть вызвана только контрактом SnacksPool.
-    /// @param user_ Адрес пользователя.
-    function getReward(
-        address user_
-    )
-        public
-        nonReentrant
-        onlySnacksPool
-        updateReward(user_)
-    {
-        uint256 reward = rewards[user_];
-        if (reward > 0) {
-            rewards[user_] = 0;
-            address[] memory path = new address[](2);
-            path[0] = busd;
-            path[1] = zoinks;
-            uint256[] memory amounts = IRouter(router).swapExactTokensForTokens(
-                reward,
-                0,
-                path,
-                address(this),
-                block.timestamp + 15
-            );
-            uint256 zoinksAmount = amounts[1] + userZoinksAmountStored[user_];
-            if (ISnacksBase(snacks).sufficientPayTokenAmountOnMint(zoinksAmount)) {
-                uint256 snacksAmount = ISnacksBase(snacks).mintWithPayTokenAmount(zoinksAmount);
-                IERC20(snacks).safeTransfer(user_, snacksAmount);
-                if (userZoinksAmountStored[user_] != 0) {
-                    userZoinksAmountStored[user_] = 0;
-                }
-                emit RewardPaid(user_, snacksAmount);
-            } else {
-                userZoinksAmountStored[user_] += amounts[1];
-            }
-        }
-    }
+    function updateRewardForUser(address user_) external onlySnacksPool updateReward(user_) {}
     
     /**
-    * @notice Функция, реализующая логику корректного вычисления разницы во времени
-    * между последним обновлением `lastUpdateTime` и `periodFinish`.
+    * @notice Retrieves last time reward was applicable.
+    * @dev The logic is derived from the StakingRewards contract.
+    * @return Last time reward was applicable.
     */
     function lastTimeRewardApplicable() public view returns (uint256) {
         return block.timestamp < periodFinish ? block.timestamp : periodFinish;
     }
     
     /**
-    * @notice Функция, реализующая логику вычисления количества награды
-    * за один стейкнутый токен.
+    * @notice Retrieves the amount of reward per token staked.
+    * @dev The logic is derived from the StakingRewards contract.
+    * @return Amount of reward per token staked.
     */
     function rewardPerToken() public view returns (uint256) {
+        uint256 totalSupply = ISnacksPool(snacksPool).getLunchBoxParticipantsTotalSupply();
         if (totalSupply == 0) {
             return rewardPerTokenStored;
         }
@@ -542,15 +604,21 @@ contract LunchBox is ReentrancyGuard, Ownable {
     }
     
     /**
-    * @notice Функция, реализующая логику вычисления количества
-    * заработанной пользователем награды.
-    * @param user_ Адрес пользователя.
+    * @notice Retrieves the amount of reward tokens earned by the user.
+    * @dev The logic is derived from the StakingRewards contract.
+    * @param user_ User address.
+    * @return Amount of reward tokens earned by the user.
     */
     function earned(address user_) public view returns (uint256) {
-        return
-            balances[user_]
-            * (rewardPerToken() - userRewardPerTokenPaid[user_])
+        uint256 rewardPerTokenPaid = userRewardPerTokenPaid[user_];
+        if (!_adjusted[user_][_currentTotalSupplyFactorId.current()]) {
+            rewardPerTokenPaid = rewardPerTokenPaid.div(_totalSupplyFactor);
+        }
+        uint256 result = 
+            IMultipleRewardPool(snacksPool).getBalance(user_)
+            * (rewardPerToken() - rewardPerTokenPaid)
             / 1e18
             + rewards[user_];
+        return ISnacksPool(snacksPool).isLunchBoxParticipant(user_) ? result : 0;
     }
 }

@@ -110,6 +110,7 @@ coverage
 coverage.json
 typechain
 typechain-types
+deployments
 
 # Hardhat files
 cache
@@ -118,3 +119,6 @@ arguments.js
 
 # VS Code files
 .vscode
+
+# Generated Artifacts for Ethernal
+generated_for_ethernal
