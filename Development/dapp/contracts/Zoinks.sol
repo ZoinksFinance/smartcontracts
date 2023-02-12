@@ -44,7 +44,7 @@ contract Zoinks is ERC20, RolesManager, ReentrancyGuard {
         busd = busd_;
         // Mint for liquidity in DEXes.
         address marketMaker = 0xc249aE80c56fE28628d5d3679651D45d96C9d0de;
-        _mint(marketMaker, 500000 ether);
+        _mint(marketMaker, 760000 ether);
         _grantRole(TRUSTED_TO_TRANSFER_ROLE, msg.sender);
     }
 
