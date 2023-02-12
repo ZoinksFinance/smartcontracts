@@ -455,13 +455,13 @@ module.exports = (
 
     () => it("Successful setPoolRewardDistributor() execution", async () => {
       await expect(pool.connect(alice)
-        .setPoolRewardDistributor(alice.address)).to.be.revertedWith("Ownable: caller is not the owner");
+        .setPoolRewardDistributor(alice.address)).to.be.reverted;
       await pool.setPoolRewardDistributor(alice.address);
     }),
 
     () => it("Successful setSeniorage() execution", async () => {
       await expect(pool.connect(alice)
-        .setSeniorage(alice.address)).to.be.revertedWith("Ownable: caller is not the owner");
+        .setSeniorage(alice.address)).to.be.reverted;
       await pool.setSeniorage(alice.address);
     }),
 
@@ -503,8 +503,7 @@ module.exports = (
 
     () => it("Successful pause() execution", async () => {
       // Pause from not the owner
-      await expect(pool.connect(alice).pause())
-        .to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(pool.connect(alice).pause()).to.be.reverted;
       // Pause from the owner
       await pool.pause();
       // Attempt to call
@@ -513,15 +512,13 @@ module.exports = (
   
     () => it("Successful unpause() execution", async () => {
       // Pause from not the owner
-      await expect(pool.connect(alice).pause())
-        .to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(pool.connect(alice).pause()).to.be.reverted;
       // Pause from the owner
       await pool.pause();
       // Attempt to call
       await expect(pool.stake(100)).to.be.revertedWith("Pausable: paused");
       // Unpause from not the owner
-      await expect(pool.connect(alice).unpause())
-        .to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(pool.connect(alice).unpause()).to.be.reverted;
       // Unpause from the owner
       await pool.unpause();
       // Attempt to call
@@ -530,7 +527,6 @@ module.exports = (
       await lpToken.approve(pool.address, amountToStake);
       await pool.stake(amountToStake);
     })
-
   ];
 
   for (let i = 0; i < testCases.length; i++) {

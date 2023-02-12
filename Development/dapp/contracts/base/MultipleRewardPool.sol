@@ -2,14 +2,13 @@
 pragma solidity 0.8.15;
 
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
+import "./RolesManager.sol";
 import "../interfaces/IMultipleRewardPool.sol";
 
-abstract contract MultipleRewardPool is IMultipleRewardPool, ReentrancyGuard, Ownable, Pausable {
+abstract contract MultipleRewardPool is IMultipleRewardPool, RolesManager, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
 
@@ -88,7 +87,7 @@ abstract contract MultipleRewardPool is IMultipleRewardPool, ReentrancyGuard, Ow
     * @dev Could be called by the owner in case of address reset.
     * @param poolRewardDistributor_ PoolRewardDistributor contract address.
     */
-    function setPoolRewardDistributor(address poolRewardDistributor_) external onlyOwner {
+    function setPoolRewardDistributor(address poolRewardDistributor_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         poolRewardDistributor = poolRewardDistributor_;
         emit PoolRewardDistributorUpdated(poolRewardDistributor_);
     }
@@ -98,25 +97,9 @@ abstract contract MultipleRewardPool is IMultipleRewardPool, ReentrancyGuard, Ow
     * @dev Could be called by the owner in case of address reset.
     * @param seniorage_ Seniorage contract address.
     */
-    function setSeniorage(address seniorage_) external onlyOwner {
+    function setSeniorage(address seniorage_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         seniorage = seniorage_;
         emit SeniorageUpdated(seniorage_);
-    }
-
-    /**
-    * @notice Triggers stopped state.
-    * @dev Could be called by the owner in case of resetting addresses.
-    */
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    /**
-    * @notice Returns to normal state.
-    * @dev Could be called by the owner in case of resetting addresses.
-    */
-    function unpause() external onlyOwner {
-        _unpause();
     }
     
     /**
@@ -124,7 +107,7 @@ abstract contract MultipleRewardPool is IMultipleRewardPool, ReentrancyGuard, Ow
     * @dev Could be called only by the owner.
     * @param rewardsDuration_ New rewards duration value.
     */
-    function setRewardsDuration(uint256 rewardsDuration_) external onlyOwner {
+    function setRewardsDuration(uint256 rewardsDuration_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         bool finished = true;
         for (uint256 i = 0; i < _rewardTokens.length(); i++) {
             if (block.timestamp <= periodFinishPerToken[_rewardTokens.at(i)]) {

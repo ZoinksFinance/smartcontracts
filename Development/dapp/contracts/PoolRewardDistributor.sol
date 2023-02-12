@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.15;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import "./base/RolesManager.sol";
 import "./interfaces/IMultipleRewardPool.sol";
 import "./interfaces/ISingleRewardPool.sol";
 import "./interfaces/IRouter.sol";
 import "./interfaces/ISnacksBase.sol";
 
-contract PoolRewardDistributor is Ownable, Pausable {
+contract PoolRewardDistributor is RolesManager {
     using SafeERC20 for IERC20;
     
     uint256 private constant BASE_PERCENT = 10000;
@@ -37,15 +36,6 @@ contract PoolRewardDistributor is Ownable, Pausable {
     address public snacksPool;
     address public lunchBox;
     address public seniorage;
-    address public authority;
-    
-    modifier onlyAuthority {
-        require(
-            msg.sender == authority,
-            "PoolRewardDistributor: caller is not authorised"
-        );
-        _;
-    }
 
     /**
     * @param busd_ Binance-Peg BUSD token address.
@@ -89,7 +79,7 @@ contract PoolRewardDistributor is Ownable, Pausable {
         address authority_
     )
         external
-        onlyOwner
+        onlyRole(DEFAULT_ADMIN_ROLE)
     {
         zoinks = zoinks_;
         snacks = snacks_;
@@ -101,26 +91,10 @@ contract PoolRewardDistributor is Ownable, Pausable {
         snacksPool = snacksPool_;
         lunchBox = lunchBox_;
         seniorage = seniorage_;
-        authority = authority_;
+        _grantRole(AUTHORITY_ROLE, authority_);
         if (IERC20(zoinks_).allowance(address(this), snacks_) == 0) {
             IERC20(zoinks_).approve(snacks_, type(uint256).max);
         }
-    }
-
-    /**
-    * @notice Triggers stopped state.
-    * @dev Could be called by the owner in case of resetting addresses.
-    */
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    /**
-    * @notice Returns to normal state.
-    * @dev Could be called by the owner in case of resetting addresses.
-    */
-    function unpause() external onlyOwner {
-        _unpause();
     }
     
     /**
@@ -129,7 +103,7 @@ contract PoolRewardDistributor is Ownable, Pausable {
     * @param zoinksAmountOutMin_ Minimum expected amount of Zoinks token 
     * to be received after the exchange 90% of the total balance of Binance-Peg BUSD token.
     */
-    function distributeRewards(uint256 zoinksAmountOutMin_) external whenNotPaused onlyAuthority {
+    function distributeRewards(uint256 zoinksAmountOutMin_) external whenNotPaused onlyRole(AUTHORITY_ROLE) {
         uint256 reward;
         uint256 seniorageFeeAmount;
         uint256 distributionAmount;

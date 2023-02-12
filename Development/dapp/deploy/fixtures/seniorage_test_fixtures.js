@@ -1,4 +1,6 @@
 const hre = require('hardhat');
+const keccak256 = require('keccak256');
+
 module.exports = async ({ getNamedAccounts, deployments }) => {
   const { execute } = deployments;
   const { deployer } = await getNamedAccounts();
@@ -39,6 +41,8 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
     { from: deployer, log: true },
     'configureCurrencies',
     (await deployments.get(hre.names.external.pairs.pancake.lp)).address,
+    (await deployments.get(hre.names.external.pairs.ape.lp)).address,
+    (await deployments.get(hre.names.external.pairs.bi.lp)).address,
     (await deployments.get(hre.names.internal.zoinks)).address,
     (await deployments.get(hre.names.external.tokens.btc)).address,
     (await deployments.get(hre.names.external.tokens.eth)).address,
@@ -57,7 +61,8 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
   await execute(
     hre.names.internal.seniorage,
     { from: deployer, log: true },
-    'setAuthority',
+    'grantRole',
+    keccak256("AUTHORITY_ROLE"),
     deployer
   );
 

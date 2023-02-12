@@ -76,11 +76,11 @@ module.exports = (
   });
 
   const testCases = [
-    () => it("0. Check after deploy we don't have any total supply of <any>Snacks", async () => {
+    () => it("Check after deploy we don't have any total supply of <any>Snacks", async () => {
       expect(await anySnacks.totalSupply()).to.be.equal(ZERO);
     }),
 
-    (overridenExpectedValue) => it("1. Check how many <token> we need to pay for 5 new <any>Snacks", async () => {
+    (overridenExpectedValue) => it("Check how many <token> we need to pay for 5 new <any>Snacks", async () => {
       // newLastSnack min ONE_SNACK
       // for redeem also min ONE_SNACK
       expect(await anySnacks.calculatePayTokenAmountOnMint(
@@ -90,7 +90,7 @@ module.exports = (
       );
     }),
 
-    (overridenBuyerBTCInitial) => it("2. Buy 5 new <any>Snacks and pay with 0.00000015 <token>. And check undistributed 5% buy fee 0.25 <any>Snacks", async () => {
+    (overridenBuyerBTCInitial) => it("Buy 5 new <any>Snacks and pay with 0.00000015 <token>. And check undistributed 5% buy fee 0.25 <any>Snacks", async () => {
       // ARRANGE
       const amountBtcSnacksToBuy = ethers.utils.parseEther('5');
       // const buyerBTCInitial = ethers.BigNumber.from('7000000150000000000'); // tokenToPay = 0.00000015
@@ -119,7 +119,7 @@ module.exports = (
       expect(undistributedFeeSnacksResult).to.be.equal(undistributedFeeSnacksExpected);
     }),
 
-    (overridenTokenToReturnExpected) => it("3. Check how many <token> we need to return for 4.75 of total 5 <any>Snacks", async () => {
+    (overridenTokenToReturnExpected) => it("Check how many <token> we need to return for 4.75 of total 5 <any>Snacks", async () => {
       // ACT
       const amountBtcSnacksToBurn = ethers.utils.parseEther('4.75');
       const currentTotalSupply = ethers.utils.parseEther('5');
@@ -131,7 +131,7 @@ module.exports = (
       expect(tokenToReturnResult).to.be.equal(tokenToReturnExpected);
     }),
 
-    (overridenTokenToReturnExpected) => it("4. Check how many <token> we need to return for 6 of total 7 <any>Snacks", async () => {
+    (overridenTokenToReturnExpected) => it("Check how many <token> we need to return for 6 of total 7 <any>Snacks", async () => {
       // ACT
       const amountBtcSnacksToBurn = ethers.utils.parseEther('6');
       const currentTotalSupply = ethers.utils.parseEther('7');
@@ -146,7 +146,7 @@ module.exports = (
     (
       overridenBuyerBTC,
       overridenSellerBTCExpected
-    ) => it("5. Redeem 4.75 <any>Snacks and get <token>. And check undistributed 5% buy + 10% redeem fee 0.50 <any>Snacks", async () => {
+    ) => it("Redeem 4.75 <any>Snacks and get <token>. And check undistributed 5% buy + 10% redeem fee 0.50 <any>Snacks", async () => {
       // ACT
       // Step 1: buy Snacks
       const amountBtcSnacksToBuy = ethers.utils.parseEther('5');
@@ -184,7 +184,7 @@ module.exports = (
       overridenSnacksBtcSnacksWithFeeExpected,
       overridenSeniorageBtcSnacksWithFeeExpected,
       overridenTolerance
-    ) => it("6. First we have 5 buyers of <any>Snacks, then distribute undistributed fee", async () => {
+    ) => it("First we have 5 buyers of <any>Snacks, then distribute undistributed fee", async () => {
       // ACT
       const amountBtcSnacksToBuy = ethers.utils.parseEther('5'); // total supply 0
 
@@ -267,8 +267,8 @@ module.exports = (
       expect(balance5BtcSnacksWithFeeResult).to.be.closeTo(balance5BtcSnacksWithFeeExpected, tolerance);
     }),
 
-    () => it("7. Successful pause() execution", async () => {
-      await expect(anySnacks.connect(buyer1).pause()).to.be.revertedWith("Ownable: caller is not the owner");
+    () => it("Successful pause() execution", async () => {
+      await expect(anySnacks.connect(buyer1).pause()).to.be.reverted;
       await expect(anySnacks.pause())
         .to.emit(anySnacks, "Paused")
         .withArgs(owner.address);
@@ -277,21 +277,21 @@ module.exports = (
       ).to.be.revertedWith("Pausable: paused");
     }),
 
-    () => it("8. Successful unpause() execution", async () => {
+    () => it("Successful unpause() execution", async () => {
       await expect(anySnacks.pause())
         .to.emit(anySnacks, "Paused")
         .withArgs(owner.address);
       await expect(
         mintSnacksThroughPayToken(owner, ethers.utils.parseEther("1"))
       ).to.be.revertedWith("Pausable: paused");
-      await expect(anySnacks.connect(buyer1).unpause()).to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(anySnacks.connect(buyer1).unpause()).to.be.reverted;
       await expect(anySnacks.unpause())
         .to.emit(anySnacks, "Unpaused")
         .withArgs(owner.address);
       await mintSnacksThroughPayToken(owner, ethers.utils.parseEther("1"))
     }),
 
-    (symbol) => it("9. Test symbol()", async () => {
+    (symbol) => it("Test symbol()", async () => {
       // ARRANGE
       const symbolExpected = symbol;
 
@@ -302,7 +302,7 @@ module.exports = (
       expect(symbolResult).to.be.equal(symbolExpected);
     }),
 
-    (name) => it("10. Test name()", async () => {
+    (name) => it("Test name()", async () => {
       // ARRANGE
       const nameExpected = name;
 
@@ -313,7 +313,7 @@ module.exports = (
       expect(nameResult).to.be.equal(nameExpected);
     }),
 
-    () => it("11. Test decimals()", async () => {
+    () => it("Test decimals()", async () => {
       // ARRANGE
       const decimalsExpected = decimals;
 
@@ -324,7 +324,7 @@ module.exports = (
       expect(decimalsResult).to.be.equal(decimalsExpected);
     }),
 
-    () => it("12. Test sufficientBuyTokenAmountOnMint()", async () => {
+    () => it("Test sufficientBuyTokenAmountOnMint()", async () => {
       // ARRANGE
       const buyTokenAmount_ = ethers.utils.parseEther('5');
 
@@ -336,7 +336,7 @@ module.exports = (
       expect(result).to.be.equal(expected);
     }),
 
-    () => it("13. Test approve & decreaseAllowance", async () => {
+    () => it("Test approve & decreaseAllowance", async () => {
       // ARRANGE
       const amountApprove = ethers.utils.parseEther('5');
       const amountDecrease = ethers.utils.parseEther('4');
@@ -360,7 +360,7 @@ module.exports = (
       expect(decreased3Result).to.be.equal(decreased3Expected);
     }),
 
-    () => it("14. Test increaseAllowance", async () => {
+    () => it("Test increaseAllowance", async () => {
       // ARRANGE
       const amountIncrease = ethers.utils.parseEther('5');
       const allowedExpected = ethers.utils.parseEther('5');
@@ -375,8 +375,8 @@ module.exports = (
       expect(allowedResult).to.be.equal(allowedExpected);
     }),
 
-    () => it("15. Valid addresses check", async () => {
-      await expect(anySnacks.distributeFee()).to.be.revertedWith("SnacksBase: caller is not authorised");
+    () => it("Valid addresses check", async () => {
+      await expect(anySnacks.distributeFee()).to.be.reverted;
       await startImpersonating(ZERO_ADDRESS);
       const zeroAddress = await ethers.getSigner(ZERO_ADDRESS);
       await expect(anySnacks.connect(zeroAddress).increaseAllowance(owner.address, 100))
@@ -389,13 +389,13 @@ module.exports = (
         .to.be.revertedWith("SnacksBase: transfer to the zero address");
     }),
 
-    () => it("16. Successful calculations check", async () => {
+    () => it("Successful calculations check", async () => {
       await expect(anySnacks.calculatePayTokenAmountOnMint(100)).to.be.revertedWith("SnacksBase: invalid buy token amount");
       await expect(anySnacks.calculateBuyTokenAmountOnMint(100)).to.be.revertedWith("SnacksBase: invalid pay token amount");
       await expect(anySnacks.calculatePayTokenAmountOnRedeem(100)).to.be.revertedWith("SnacksBase: invalid buy token amount");
     }),
 
-    () => it("17. Fee distribution when holders supply is 0", async () => {
+    () => it("Fee distribution when holders supply is 0", async () => {
       const amount = ethers.utils.parseEther("1");
       await payTokenMintingAction(owner, amount, token);
       await token.approve(anySnacks.address, amount);
@@ -404,10 +404,10 @@ module.exports = (
       await anySnacks.connect(buyer1).distributeFee();
     }),
 
-    () => it("18. Successful addToExcludedHolders() execution", async () => {
+    () => it("Successful addToExcludedHolders() execution", async () => {
       // Call from not the owner
       await expect(anySnacks.connect(buyer1).addToExcludedHolders(buyer2.address))
-        .to.be.revertedWith("Ownable: caller is not the owner");
+        .to.be.reverted;
       // Add buyer2 to excluded
       await anySnacks.addToExcludedHolders(buyer2.address);
       // Check
@@ -416,10 +416,10 @@ module.exports = (
       await expect(anySnacks.addToExcludedHolders(buyer2.address)).to.be.revertedWith("SnacksBase: already excluded");
     }),
 
-    () => it("19. Successful removeFromExcludedHolders() execution", async () => {
+    () => it("Successful removeFromExcludedHolders() execution", async () => {
       // Call from not the owner
       await expect(anySnacks.connect(buyer1).removeFromExcludedHolders(anySnacks.address))
-        .to.be.revertedWith("Ownable: caller is not the owner");
+        .to.be.reverted;
       // Add buyer2 to excluded
       await anySnacks.removeFromExcludedHolders(anySnacks.address);
       // Check

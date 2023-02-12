@@ -103,14 +103,16 @@ describe("SnacksPool", () => {
         lunchBox.address,
         snacks.address,
         btcSnacks.address,
-        ethSnacks.address
-    )).to.be.revertedWith("Ownable: caller is not the owner");
+        ethSnacks.address,
+        alice.address
+    )).to.be.reverted;
     // Call from the owner
     await pool.configure(
       lunchBox.address,
       snacks.address,
       btcSnacks.address,
-      ethSnacks.address
+      ethSnacks.address,
+      alice.address
     );
   });
 
@@ -305,7 +307,7 @@ describe("SnacksPool", () => {
       0,
       0,
       0
-    )).to.be.revertedWith("SnacksPool: caller is not authorised");
+    )).to.be.reverted;
     await mockSwaps(
       "PancakeSwapRouter",
       deployments,
@@ -576,5 +578,15 @@ describe("SnacksPool", () => {
     // Calculate potential earnings for Alice
     const potentialEarningsAfter = await pool.calculatePotentialReward(snacks.address, alice.address, PERIOD);
     expect(potentialEarningsAfter).to.be.closeTo(potentialEarnings, 2000);
+  });
+
+  it("Successful withdraw execution (trying to withdraw amount that bigger than deposit)", async() => {
+    const THOUSAND = ethers.utils.parseEther("1000");
+    await mintZoinksAndAllSnacks(deployments, owner, THOUSAND, owner);
+    await snacks.approve(pool.address, THOUSAND.mul(2));
+    // Stake 1000
+    await pool.stake(THOUSAND);
+    // Withdraw 1000
+    await expect(pool.connect(alice).withdraw(THOUSAND)).to.be.reverted;
   });
 });

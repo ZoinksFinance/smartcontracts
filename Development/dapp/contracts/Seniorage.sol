@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.15;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
+import "./base/RolesManager.sol";
 import "./interfaces/IRouter.sol";
 import "./interfaces/ISnacksBase.sol";
 import "./interfaces/ILunchBox.sol";
 import "./interfaces/IZoinks.sol";
 
-contract Seniorage is Ownable, Pausable {
+contract Seniorage is RolesManager {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
-
+    
     uint256 private constant BASE_PERCENT = 10000;
     uint256 private constant BDM_WALLET_PERCENT = 500;
     uint256 private constant CRM_WALLET_PERCENT = 500;
@@ -27,21 +26,22 @@ contract Seniorage is Ownable, Pausable {
     uint256 private constant SWAP_ON_ETH_PERCENT = 400;
     uint256 private constant BTC_SNACKS_PULSE_PERCENT = 5000;
     uint256 private constant ETH_SNACKS_PULSE_PERCENT = 5000;
-    uint256 private constant ADD_LIQUIDITY_PERCENT = 2500;
+    uint256 private constant ADD_LIQUIDITY_PERCENT = 1500;
     uint256 private constant SWAP_ON_ZOINKS_PERCENT = 200;
     uint256 private constant LUNCH_BOX_PERCENT = 4500;
-    uint256 private constant MULTISIG_WALLET_PERCENT = 2000;
+    uint256 private constant MULTISIG_WALLET_PERCENT = 3000;
     
     address public immutable busd;
     address public immutable router;
     address public cakeLP;
+    address public apeLP;
+    address public bswLP;
     address public zoinks;
     address public btc;
     address public eth;
     address public snacks;
     address public btcSnacks;
     address public ethSnacks;
-    address public authority;
     address public pulse;
     address public lunchBox;
     address public bdmWallet;
@@ -61,15 +61,6 @@ contract Seniorage is Ownable, Pausable {
 
     event PulseUpdated(address indexed pulse);
     event LunchBoxUpdated(address indexed lunchBox);
-    event AuthorityUpdated(address indexed authority);
-
-    modifier onlyAuthority {
-        require(
-            msg.sender == authority,
-            "Seniorage: caller is not authorised"
-        );
-        _;
-    }
     
     /**
     * @param busd_ Binance-Peg BUSD token address.
@@ -88,6 +79,8 @@ contract Seniorage is Ownable, Pausable {
     * @notice Configures currency addresses.
     * @dev Could be called by the owner in case of resetting addresses.
     * @param cakeLP_ Pancake LPs token address.
+    * @param apeLP_ ApeSwapFinance LPs token address.
+    * @param bswLP_ Biswap LPs token address.
     * @param zoinks_ Zoinks token address.
     * @param btc_ Binance-Peg BTCB token address.
     * @param eth_ Binance-Peg Ethereum token address.
@@ -97,6 +90,8 @@ contract Seniorage is Ownable, Pausable {
     */
     function configureCurrencies(
         address cakeLP_,
+        address apeLP_,
+        address bswLP_,
         address zoinks_,
         address btc_,
         address eth_,
@@ -105,18 +100,23 @@ contract Seniorage is Ownable, Pausable {
         address ethSnacks_
     )
         external
-        onlyOwner
+        onlyRole(DEFAULT_ADMIN_ROLE)
     {
         cakeLP = cakeLP_;
+        apeLP = apeLP_;
+        bswLP = bswLP_;
         zoinks = zoinks_;
         btc = btc_;
         eth = eth_;
         snacks = snacks_;
         btcSnacks = btcSnacks_;
         ethSnacks = ethSnacks_;
+        address[] memory temp = new address[](_nonBusdCurrencies.length());
         for (uint256 i = 0; i < _nonBusdCurrencies.length(); i++) {
-            address currency = _nonBusdCurrencies.at(i);
-            _nonBusdCurrencies.remove(currency);
+            temp[i] = _nonBusdCurrencies.at(i);
+        }
+        for (uint256 j = 0; j < temp.length; j++) {
+            _nonBusdCurrencies.remove(temp[j]);
         }
         _nonBusdCurrencies.add(zoinks_);
         _nonBusdCurrencies.add(btc_);
@@ -164,7 +164,7 @@ contract Seniorage is Ownable, Pausable {
         address multisigWallet_
     )
         external
-        onlyOwner
+        onlyRole(DEFAULT_ADMIN_ROLE)
     {
         bdmWallet = bdmWallet_;
         crmWallet = crmWallet_;
@@ -177,19 +177,23 @@ contract Seniorage is Ownable, Pausable {
     }
 
     /**
-    * @notice Triggers stopped state.
-    * @dev Could be called by the owner in case of resetting addresses.
+    * @notice Transfers LP tokens to the `receiver_` address.
+    * @dev Could be called only by the owner.
+    * @param receiver_ Receiver address.
     */
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    /**
-    * @notice Triggers stopped state.
-    * @dev Could be called by the owner in case of resetting addresses.
-    */
-    function unpause() external onlyOwner {
-        _unpause();
+    function withdrawLP(address receiver_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 cakeLPBalance = IERC20(cakeLP).balanceOf(address(this));
+        if (cakeLPBalance != 0) {
+            IERC20(cakeLP).safeTransfer(receiver_, cakeLPBalance);
+        }
+        uint256 apeLPBalance = IERC20(apeLP).balanceOf(address(this));
+        if (apeLPBalance != 0) {
+            IERC20(apeLP).safeTransfer(receiver_, apeLPBalance);
+        }
+        uint256 bswLPBalance = IERC20(bswLP).balanceOf(address(this));
+        if (bswLPBalance != 0) {
+            IERC20(bswLP).safeTransfer(receiver_, bswLPBalance);
+        }
     }
     
     /**
@@ -197,7 +201,7 @@ contract Seniorage is Ownable, Pausable {
     * @dev Could be called by the owner in case of address reset.
     * @param pulse_ Pulse contract address.
     */
-    function setPulse(address pulse_) external onlyOwner {
+    function setPulse(address pulse_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         pulse = pulse_;
         emit PulseUpdated(pulse_);
     }
@@ -207,7 +211,7 @@ contract Seniorage is Ownable, Pausable {
     * @dev Could be called by the owner in case of address reset.
     * @param lunchBox_ LunchBox contract address.
     */
-    function setLunchBox(address lunchBox_) external onlyOwner {
+    function setLunchBox(address lunchBox_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         lunchBox = lunchBox_;
         IERC20(busd).approve(lunchBox_, type(uint256).max);
         IERC20(zoinks).approve(lunchBox_, type(uint256).max);
@@ -217,16 +221,6 @@ contract Seniorage is Ownable, Pausable {
         IERC20(btcSnacks).approve(lunchBox_, type(uint256).max);
         IERC20(ethSnacks).approve(lunchBox_, type(uint256).max);
         emit LunchBoxUpdated(lunchBox_);
-    }
-    
-    /**
-    * @notice Sets the authorised address.
-    * @dev Could be called by the owner in case of address reset.
-    * @param authority_ Authorised address.
-    */
-    function setAuthority(address authority_) external onlyOwner {
-        authority = authority_;
-        emit AuthorityUpdated(authority_);
     }
 
     /**
@@ -246,7 +240,7 @@ contract Seniorage is Ownable, Pausable {
     ) 
         external 
         whenNotPaused 
-        onlyAuthority 
+        onlyRole(AUTHORITY_ROLE) 
     {
         for (uint256 i = 0; i < _nonBusdCurrencies.length(); i++) {
             address currency = _nonBusdCurrencies.at(i);
@@ -315,7 +309,7 @@ contract Seniorage is Ownable, Pausable {
     )
         external
         whenNotPaused
-        onlyAuthority
+        onlyRole(AUTHORITY_ROLE)
     {
         uint256 balance = IERC20(busd).balanceOf(address(this)) - busdAmountStored;
         if (balance != 0) {
@@ -405,7 +399,7 @@ contract Seniorage is Ownable, Pausable {
     )
         external
         whenNotPaused
-        onlyAuthority
+        onlyRole(AUTHORITY_ROLE)
     {
         if (busdAmountStored != 0) {
             uint256 addLiquidityAmount = busdAmountStored / 2;

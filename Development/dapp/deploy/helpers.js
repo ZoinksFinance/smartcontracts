@@ -420,7 +420,7 @@ const emptyStage = (message) =>
       log(message);
   };
 
-const backendCall1224 = async (hre) => {
+const backendCall1224 = async (hre, expects) => {
   let authority;
 
   let zoinks;
@@ -468,29 +468,74 @@ const backendCall1224 = async (hre) => {
 
   // ACT
   // 1. Zoinks - applyTWAP
-  await zoinks.connect(authority).applyTWAP();
+  const applyTwapTx = await zoinks.connect(authority).applyTWAP();
+  if (expects !== undefined) {
+    await expects[0](applyTwapTx);
+  }
   // 2. BtcSnacks - distributeFee
-  await btcSnacks.connect(authority).distributeFee();
+  const metadataForDistributeFeeBtcSnacksExpect = expects !== undefined ? await expects[1].before() : {};
+  const distributeFeeBtcSnacksTx = await btcSnacks.connect(authority).distributeFee();
+  if (expects !== undefined) {
+    await expects[1].after(distributeFeeBtcSnacksTx, metadataForDistributeFeeBtcSnacksExpect);
+  }
   // 3. EthSnacks - distributeFee
-  await ethSnacks.connect(authority).distributeFee();
+  const metadataForDistributeFeeEthSnacksExpect = expects !== undefined ? await expects[2].before() : {};
+  const distributeFeeEthSnacksTx = await ethSnacks.connect(authority).distributeFee();
+  if (expects !== undefined) {
+    await expects[2].after(distributeFeeEthSnacksTx, metadataForDistributeFeeEthSnacksExpect);
+  }
   // 4. Snacks - distributeFee
-  await snacks.connect(authority).distributeFee();
+  const metadataForDistributeFeeSnacksExpect = expects !== undefined ? await expects[3].before() : {};
+  const distributeFeeSnacksTx = await snacks.connect(authority).distributeFee();
+  if (expects !== undefined) {
+    await expects[3].after(distributeFeeSnacksTx, metadataForDistributeFeeSnacksExpect);
+  }
   // 5. Pulse - distributeBtcSnacksAndEthSnacks
-  await pulse.connect(authority).distributeBtcSnacksAndEthSnacks();
+  const metadataForDistributeBtcSnacksAndEthSnacksTx = expects !== undefined ? await expects[4].before() : {};
+  const distributeBtcSnacksAndEthSnacksTx = await pulse.connect(authority).distributeBtcSnacksAndEthSnacks();
+  if (expects !== undefined) {
+    await expects[4].after(distributeBtcSnacksAndEthSnacksTx, metadataForDistributeBtcSnacksAndEthSnacksTx);
+  }
   // 6. Seniorage - provideLiquidity
-  await seniorage.connect(authority).provideLiquidity(0, 0);
+  const provideLiquidityTx = await seniorage.connect(authority).provideLiquidity(0, 0);
+  if (expects !== undefined) {
+    await expects[5](provideLiquidityTx);
+  }
   // 7. Seniorage - distributeNonBusdCurrencies
-  await seniorage.connect(authority).distributeNonBusdCurrencies(0, 0, 0);
+  const metadataForDistributeNonBusdCurrenciesTx = expects !== undefined ? await expects[6].before() : {};
+  const distributeNonBusdCurrenciesTx = await seniorage.connect(authority).distributeNonBusdCurrencies(0, 0, 0);
+  if (expects !== undefined) {
+    await expects[6].after(distributeNonBusdCurrenciesTx, metadataForDistributeNonBusdCurrenciesTx);
+  }
   // 8. Seniorage - distributeBusd
-  await seniorage.connect(authority).distributeBusd(0, 0, 0);
+  const metadataForDistributeBusdTx = expects !== undefined ? await expects[7].before() : {};
+  const distributeBusdTx = await seniorage.connect(authority).distributeBusd(0, 0, 0);
+  if (expects !== undefined) {
+    await expects[7].after(distributeBusdTx, metadataForDistributeBusdTx);
+  }
   // 9. Pulse - harvest
-  await pulse.connect(authority).harvest();
+  const harvestTx = await pulse.connect(authority).harvest();
+  if (expects !== undefined) {
+    await expects[8](harvestTx);
+  }
   // 10. Pulse - distributeSnacks
-  await pulse.connect(authority).distributeSnacks();
+  const metadataForDistributeSnacksTx = expects !== undefined ? await expects[9].before() : {};
+  const distributeSnacksTx = await pulse.connect(authority).distributeSnacks();
+  if (expects !== undefined) {
+    await expects[9].after(distributeSnacksTx, metadataForDistributeSnacksTx);
+  }
   // 11. Pulse - distributeZoinks
-  await pulse.connect(authority).distributeZoinks();
+  const metadataForDistributeZoinksTx = expects !== undefined ? await expects[10].before() : {};
+  const distributeZoinksTx = await pulse.connect(authority).distributeZoinks();
+  if (expects !== undefined) {
+    await expects[10].after(distributeZoinksTx, metadataForDistributeZoinksTx);
+  }
   // 12. PoolRewardDistributor - distributeRewards
-  await poolRewardDistributor.connect(authority).distributeRewards(0);
+  const metadataForDistributeRewardsTx = expects !== undefined ? await expects[11].before() : {};
+  const distributeRewardsTx = await poolRewardDistributor.connect(authority).distributeRewards(0);
+  if (expects !== undefined) {
+    await expects[11].after(distributeRewardsTx, metadataForDistributeRewardsTx);
+  }
   // 13. SnacksPool - deliverRewardsForAllLunchBoxParticipants
   let user;
   let totalRewardAmountForParticipantsInSnacks = ZERO;
@@ -505,7 +550,9 @@ const backendCall1224 = async (hre) => {
     totalRewardAmountForParticipantsInEthSnacks 
       = totalRewardAmountForParticipantsInEthSnacks.add(await snacksPool.earned(user, ethSnacks.address));
   }
-  await snacksPool.connect(authority).deliverRewardsForAllLunchBoxParticipants(
+
+  const metadataForDeliverRewardsForAllLunchBoxParticipantsTx = expects !== undefined ? await expects[12].before() : {};
+  const deliverRewardsForAllLunchBoxParticipantsTx = await snacksPool.connect(authority).deliverRewardsForAllLunchBoxParticipants(
     totalRewardAmountForParticipantsInSnacks,
     totalRewardAmountForParticipantsInBtcSnacks,
     totalRewardAmountForParticipantsInEthSnacks,
@@ -513,6 +560,15 @@ const backendCall1224 = async (hre) => {
     0,
     0
   );
+  if (expects !== undefined) {
+    await expects[12].after(
+      deliverRewardsForAllLunchBoxParticipantsTx,
+      totalRewardAmountForParticipantsInSnacks,
+      totalRewardAmountForParticipantsInBtcSnacks,
+      totalRewardAmountForParticipantsInEthSnacks,
+      metadataForDeliverRewardsForAllLunchBoxParticipantsTx
+    );
+  }
 }
 
 module.exports = {

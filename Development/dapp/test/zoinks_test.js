@@ -2,6 +2,7 @@ const { expect } = require("chai");
 const { time } = require("@nomicfoundation/hardhat-network-helpers");
 const hre = require('hardhat');
 const {ethers, deployments} = hre;
+const keccak256 = require('keccak256');
 const {
   mockedReserve1,
   mockedReserve0,
@@ -12,7 +13,7 @@ const {
 describe("Zoinks", () => {
   beforeEach(async () => {
     await deployments.fixture(['zoinks_test_fixtures']);
-    [owner, authority] = await ethers.getSigners();
+    [owner, authority, alice] = await ethers.getSigners();
     zoinks = await ethers.getContractAt(
       hre.names.internal.zoinks,
       (await deployments.get(hre.names.internal.zoinks)).address
@@ -60,7 +61,7 @@ describe("Zoinks", () => {
         poolRewardDistributor.address,
         averagePriceOracle.address
       )
-    ).to.be.revertedWith("Ownable: caller is not the owner");
+    ).to.be.reverted;
     await zoinks.configure(
       authority.address,
       seniorage.address,
@@ -98,7 +99,7 @@ describe("Zoinks", () => {
     await busd.approve(zoinks.address, MAX_SUPPLY);
     await zoinks.mint(MAX_SUPPLY.sub(ethers.utils.parseEther('500001')));
     await time.increase(3600 * 12);
-    await expect(zoinks.applyTWAP()).to.be.revertedWith('Zoinks: caller is not authorised');
+    await expect(zoinks.applyTWAP()).to.be.reverted;
     await expect(zoinks.connect(authority).applyTWAP()).to.be.revertedWith('Zoinks: max supply exceeded');
   });
 
@@ -240,7 +241,7 @@ describe("Zoinks", () => {
 
   it("Successful pause() execution", async () => {
     // Pause from not the owner
-    await expect(zoinks.connect(authority).pause()).to.be.revertedWith("Ownable: caller is not the owner");
+    await expect(zoinks.connect(authority).pause()).to.be.reverted;
     // Pause
     await zoinks.pause();
     // User's function is not available
@@ -255,10 +256,37 @@ describe("Zoinks", () => {
     await busd.approve(zoinks.address, ethers.utils.parseEther("1"));
     await expect(zoinks.mint(ethers.utils.parseEther("1"))).to.be.revertedWith("Pausable: paused");
     // Unpause from not the owner
-    await expect(zoinks.connect(authority).unpause()).to.be.revertedWith("Ownable: caller is not the owner");
+    await expect(zoinks.connect(authority).unpause()).to.be.reverted;
     // Unpause from the owner
     await zoinks.unpause();
     // User's function becomes available
     await zoinks.mint(ethers.utils.parseEther("1"));
+  });
+
+  it("Successful transfer() from owner when contract was paused", async () => {
+    const amount = ethers.utils.parseEther("1000");
+    await busd.approve(zoinks.address, amount);
+    await zoinks.mint(amount);
+    await zoinks.transfer(alice.address, amount.div(5));
+    await zoinks.pause();
+    await expect(zoinks.connect(alice).transfer(owner.address, amount.div(5)))
+      .to.be.revertedWith("Zoinks: paused");
+    await zoinks.approve(snacks.address, amount.div(5));
+    const accounts = [snacks.address];
+    await zoinks.addSetToWhitelist(accounts);
+    await snacks.mintWithPayTokenAmount(amount.div(5));
+  });
+
+  it("Successful addToWhitelist() execution", async() => {
+    const accounts = [alice.address];
+    await zoinks.addSetToWhitelist(accounts);
+    expect(await zoinks.hasRole(keccak256("TRUSTED_TO_TRANSFER_ROLE"), alice.address)).to.equal(true);
+  });
+
+  it("Successful removeFromWhitelist() execution", async() => {
+    const accounts = [alice.address];
+    await zoinks.addSetToWhitelist(accounts);
+    await zoinks.removeSetFromWhitelist(accounts);
+    expect(await zoinks.hasRole(keccak256("TRUSTED_TO_TRANSFER_ROLE"), alice.address)).to.equal(false);
   });
 });

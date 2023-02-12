@@ -14,4 +14,5 @@ interface IMultipleRewardPool {
     function getReward() external;
     function getBalance(address user) external view returns (uint256);
     function getTotalSupply() external view returns (uint256);
+    function withdraw(uint256 amount) external;
 }

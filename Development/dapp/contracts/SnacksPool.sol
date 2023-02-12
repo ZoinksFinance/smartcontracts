@@ -18,7 +18,6 @@ contract SnacksPool is MultipleRewardPool {
     address public snacks;
     address public btcSnacks;
     address public ethSnacks;
-    address public authority;
     uint256 private _excludedHoldersSupply;
     uint256 private _notExcludedHoldersSupply;
     uint256 private _excludedHoldersLunchBoxSupply;
@@ -42,15 +41,6 @@ contract SnacksPool is MultipleRewardPool {
         uint256 indexed totalSupplyFactor, 
         uint256 indexed totalSupplyFactorId
     );
-    event AuthorityUpdated(address indexed authority);
-
-    modifier onlyAuthority {
-        require(
-            msg.sender == authority,
-            "SnacksPool: caller is not authorised"
-        );
-        _;
-    }
 
     modifier onlySnacks {
         require(
@@ -87,20 +77,23 @@ contract SnacksPool is MultipleRewardPool {
     * @param snacks_ Snacks token address.
     * @param btcSnacks_ BtcSnacks token address.
     * @param ethSnacks_ EthSnacks token address.
+    * @param authority_ Authorised address.
     */
     function configure(
         address lunchBox_,
         address snacks_,
         address btcSnacks_,
-        address ethSnacks_
+        address ethSnacks_,
+        address authority_
     )
         external
-        onlyOwner
+        onlyRole(DEFAULT_ADMIN_ROLE)
     {
         lunchBox = lunchBox_;
         snacks = snacks_;
         btcSnacks = btcSnacks_;
         ethSnacks = ethSnacks_;
+        _grantRole(AUTHORITY_ROLE, authority_);
         if (IERC20(snacks_).allowance(address(this), lunchBox_) == 0) {
             IERC20(snacks_).approve(lunchBox_, type(uint256).max);
         }
@@ -133,16 +126,6 @@ contract SnacksPool is MultipleRewardPool {
             );
         }
     }
-
-    /**
-    * @notice Sets the authorised address.
-    * @dev Could be called by the owner in case of address reset.
-    * @param authority_ Authorised address.
-    */
-    function setAuthority(address authority_) external onlyOwner {
-        authority = authority_;
-        emit AuthorityUpdated(authority_);
-    }
     
     /**
     * @notice Activates the risk-free investment program for the user.
@@ -154,6 +137,7 @@ contract SnacksPool is MultipleRewardPool {
             _balances[msg.sender] > 0,
             "SnacksPool: only active stakers are able to activate LunchBox"
         );
+        getReward();
         ILunchBox(lunchBox).updateRewardForUser(msg.sender);
         require(
             _lunchBoxParticipants.add(msg.sender),
@@ -276,7 +260,7 @@ contract SnacksPool is MultipleRewardPool {
     ) 
         external 
         whenNotPaused
-        onlyAuthority
+        onlyRole(AUTHORITY_ROLE)
     {
         ILunchBox(lunchBox).stakeForSnacksPool(
             totalRewardAmountForParticipantsInSnacks_,
@@ -447,13 +431,13 @@ contract SnacksPool is MultipleRewardPool {
             );
             if (_lunchBoxParticipants.contains(msg.sender)) {
                 ILunchBox(lunchBox).updateRewardForUser(msg.sender);
-                if (adjustedAmount + 1 wei >= _balances[msg.sender]) {
+                if (_balances[msg.sender] - adjustedAmount <= 1 wei) {
                     deactivateLunchBox();
                 } else {
                     _notExcludedHoldersLunchBoxSupply -= adjustedAmount;
                 }
             }
-            if (adjustedAmount + 1 wei >= _balances[msg.sender]) {
+            if (_balances[msg.sender] - adjustedAmount <= 1 wei) {
                 _balances[msg.sender] = 0;
             } else {
                 _balances[msg.sender] -= adjustedAmount;

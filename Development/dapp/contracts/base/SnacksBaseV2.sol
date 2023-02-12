@@ -2,17 +2,16 @@
 pragma solidity 0.8.15;
 
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@prb/math/contracts/PRBMathUD60x18.sol";
 
+import "./RolesManager.sol";
 import "../interfaces/ISnacksBase.sol";
 
-abstract contract SnacksBase is ISnacksBase, IERC20Metadata, Ownable, ReentrancyGuard, Pausable {
+abstract contract SnacksBaseV2 is ISnacksBase, IERC20Metadata, RolesManager, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
     using PRBMathUD60x18 for uint256;
@@ -27,7 +26,6 @@ abstract contract SnacksBase is ISnacksBase, IERC20Metadata, Ownable, Reentrancy
     address public pulse;
     address public poolRewardDistributor;
     address public seniorage;
-    address public authority;
     uint256 public adjustmentFactor = PRBMathUD60x18.fromUint(1);
     uint256 internal _totalSupply;
     uint256 private immutable _step;
@@ -60,14 +58,6 @@ abstract contract SnacksBase is ISnacksBase, IERC20Metadata, Ownable, Reentrancy
         uint256 payTokenAmountToSeller
     );
     event RewardForHolders(uint256 indexed reward);
-    
-    modifier onlyAuthority {
-        require(
-            msg.sender == authority,
-            "SnacksBase: caller is not authorised"
-        );
-        _;
-    }
 
     modifier validOwnerAndSpender(address owner_, address spender_) {
         require(
@@ -137,17 +127,13 @@ abstract contract SnacksBase is ISnacksBase, IERC20Metadata, Ownable, Reentrancy
         address authority_
     )
         internal
-        onlyOwner
+        onlyRole(DEFAULT_ADMIN_ROLE)
     {
         payToken = payToken_;
         pulse = pulse_;
         poolRewardDistributor = poolRewardDistributor_;
         seniorage = seniorage_;
-        authority = authority_;
-        for (uint256 i = 0; i < _excludedHolders.length(); i++) {
-            address excludedHolder = _excludedHolders.at(i);
-            _excludedHolders.remove(excludedHolder);
-        }
+        _grantRole(AUTHORITY_ROLE, authority_);
         _excludedHolders.add(payToken_);
         _excludedHolders.add(pulse_);
         _excludedHolders.add(poolRewardDistributor_);
@@ -159,28 +145,12 @@ abstract contract SnacksBase is ISnacksBase, IERC20Metadata, Ownable, Reentrancy
         _excludedHolders.add(address(0));
         _excludedHolders.add(DEAD_ADDRESS);
     }
-
-    /**
-    * @notice Triggers stopped state.
-    * @dev Could be called by the owner in case of resetting addresses.
-    */
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    /**
-    * @notice Returns to normal state.
-    * @dev Could be called by the owner in case of resetting addresses.
-    */
-    function unpause() external onlyOwner {
-        _unpause();
-    }
     
     /**
     * @notice Distributes fees between the contracts and holders.
     * @dev Called by the authorised address once every 12 hours.
     */
-    function distributeFee() external whenNotPaused onlyAuthority {
+    function distributeFee() external whenNotPaused onlyRole(AUTHORITY_ROLE) {
         uint256 undistributedFee = balanceOf(address(this));
         _beforeDistributeFee(undistributedFee);
         if (undistributedFee != 0) {
@@ -412,7 +382,7 @@ abstract contract SnacksBase is ISnacksBase, IERC20Metadata, Ownable, Reentrancy
     * @dev The excluded holders don't receive fee for holding. 
     * @param account_ Account address.
     */
-    function addToExcludedHolders(address account_) external onlyOwner {
+    function addToExcludedHolders(address account_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(
             _excludedHolders.add(account_),
             "SnacksBase: already excluded"
@@ -425,7 +395,7 @@ abstract contract SnacksBase is ISnacksBase, IERC20Metadata, Ownable, Reentrancy
     * @dev Not excluded holders do receive fee for holding. 
     * @param account_ Account address.
     */
-    function removeFromExcludedHolders(address account_) external onlyOwner {
+    function removeFromExcludedHolders(address account_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(
             _excludedHolders.remove(account_),
             "SnacksBase: not excluded"
@@ -582,19 +552,6 @@ abstract contract SnacksBase is ISnacksBase, IERC20Metadata, Ownable, Reentrancy
     }
     
     /**
-    * @notice Returns the amount of tokens owned by all excluded holders.
-    * @dev Utilized to correctly calculate the balance of holders when recalculating the adjustment factor.
-    * @return Amount of tokens owned by all excluded holders.
-    */
-    function getExcludedBalance() public view virtual returns (uint256) {
-        uint256 excludedBalance;
-        for (uint256 i = 0; i < _excludedHolders.length(); i++) {
-            excludedBalance += balanceOf(_excludedHolders.at(i));
-        }
-        return excludedBalance;
-    }
-    
-    /**
     * @notice Calculates an amount of Zoinks/Binance-Peg BTCB/Binance-Peg Ethereum token 
     * which caller will spend in exchange for `buyTokenAmount_` Snacks/BtcSnacks/EthSnacks token.
     * @dev When calculating, the following formula is used: `S(n, m) = (n + m) * (m - n + 1) / 2 * d`, where 
@@ -680,41 +637,34 @@ abstract contract SnacksBase is ISnacksBase, IERC20Metadata, Ownable, Reentrancy
         );
         return numerator / (2 * _correlationFactor);
     }
-    
+
     /**
     * @notice Hook that is called inside `distributeFee()` function.
     * @dev Used only by BtcSnacks and EthSnacks contracts.
     */
-    function _beforeDistributeFee(uint256) internal virtual {}
+    function _beforeDistributeFee(uint256) internal virtual;
     
     /** 
     * @notice Hook that is called inside `distributeFee()` function.
     * @dev Recalculates adjustmentFactor according to formula: 
     * `adjustmentFactor = a * (b + c) / b`, where `a = current adjustment factor`,
     * `b = not excluded holders balance` and `c = left undistributed fee`.
-    * @param undistributedFee_ Amount of left undistributed fee.
     */
-    function _afterDistributeFee(uint256 undistributedFee_) internal virtual {
-        uint256 excludedBalance = getExcludedBalance();
-        uint256 holdersBalance = _totalSupply - excludedBalance;
-        if (undistributedFee_ != 0) {
-            uint256 seniorageFeeAmount = undistributedFee_ / 10;
-            _transfer(address(this), seniorage, seniorageFeeAmount);
-            if (holdersBalance != 0) {
-                undistributedFee_ -= seniorageFeeAmount;
-                adjustmentFactor = adjustmentFactor.mul((holdersBalance + undistributedFee_).div(holdersBalance));
-                _adjustedBalances[address(this)] = 0;
-                emit RewardForHolders(undistributedFee_);
-            }
-        }
-    }
+    function _afterDistributeFee(uint256) internal virtual;
     
+    /**
+    * @notice Hook that is called right before any 
+    * transfer of tokens. This includes minting and burning.
+    * @dev Used only by the Snacks contract.
+    */
+    function _beforeTokenTransfer(address, address, uint256) internal virtual;
+
     /**
     * @notice Hook that is called right after any 
     * transfer of tokens. This includes minting and burning.
     * @dev Used only by the Snacks contract.
     */
-    function _afterTokenTransfer(address, address) internal virtual {}
+    function _afterTokenTransfer(address, address, uint256) internal virtual;
     
     /**
     * @notice Moves `amount_` of tokens from `from_` to `to_`.
@@ -739,6 +689,7 @@ abstract contract SnacksBase is ISnacksBase, IERC20Metadata, Ownable, Reentrancy
             to_ != address(0),
             "SnacksBase: transfer to the zero address"
         );
+        _beforeTokenTransfer(from_, to_, amount_);
         uint256 adjustedAmount = amount_.div(adjustmentFactor);
         if (!_excludedHolders.contains(from_) && _excludedHolders.contains(to_)) {
             _adjustedBalances[from_] -= adjustedAmount;
@@ -753,8 +704,8 @@ abstract contract SnacksBase is ISnacksBase, IERC20Metadata, Ownable, Reentrancy
             _adjustedBalances[from_] -= amount_;
             _adjustedBalances[to_] += amount_;
         }
+        _afterTokenTransfer(from_, to_, amount_);
         emit Transfer(from_, to_, amount_);
-        _afterTokenTransfer(from_, to_);
     }
     
     /**
@@ -764,6 +715,7 @@ abstract contract SnacksBase is ISnacksBase, IERC20Metadata, Ownable, Reentrancy
     * @param amount_ Amount of tokens to mint.
     */
     function _mint(address account_, uint256 amount_) private {
+        _beforeTokenTransfer(address(0), account_, amount_);
         _totalSupply += amount_;
         uint256 adjustedAmount = amount_.div(adjustmentFactor);
         if (_excludedHolders.contains(account_)) {
@@ -771,8 +723,8 @@ abstract contract SnacksBase is ISnacksBase, IERC20Metadata, Ownable, Reentrancy
         } else {
             _adjustedBalances[account_] += adjustedAmount;
         }
+        _afterTokenTransfer(address(0), account_, amount_);
         emit Transfer(address(0), account_, amount_);
-        _afterTokenTransfer(address(0), account_);
     }
     
     /**
@@ -782,6 +734,7 @@ abstract contract SnacksBase is ISnacksBase, IERC20Metadata, Ownable, Reentrancy
     * @param amount_ Amount of tokens to burn.
     */
     function _burn(address account_, uint256 amount_) private {
+        _beforeTokenTransfer(account_, address(0), amount_);
         _totalSupply -= amount_;
         uint256 adjustedAmount = amount_.div(adjustmentFactor);
         if (_excludedHolders.contains(account_)) {
@@ -789,7 +742,7 @@ abstract contract SnacksBase is ISnacksBase, IERC20Metadata, Ownable, Reentrancy
         } else {
             _adjustedBalances[account_] -= adjustedAmount;
         }
+        _afterTokenTransfer(account_, address(0), amount_);
         emit Transfer(account_, address(0), amount_);
-        _afterTokenTransfer(account_, address(0));
     }
 }

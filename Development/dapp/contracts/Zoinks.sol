@@ -2,18 +2,18 @@
 pragma solidity 0.8.15;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
+import "./base/RolesManager.sol";
 import "./interfaces/ISnacksBase.sol";
 import "./interfaces/IAveragePriceOracle.sol";
 
-contract Zoinks is ERC20, Ownable, ReentrancyGuard, Pausable {
+contract Zoinks is ERC20, RolesManager, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
+    bytes32 public constant TRUSTED_TO_TRANSFER_ROLE = keccak256('TRUSTED_TO_TRANSFER_ROLE');
     address public constant DEAD_ADDRESS = 0x000000000000000000000000000000000000dEaD;
     uint256 public constant MAX_SUPPLY = 35000000000000 * 1e18;
     uint256 private constant BASE_PERCENT = 10000;
@@ -26,7 +26,6 @@ contract Zoinks is ERC20, Ownable, ReentrancyGuard, Pausable {
     uint256 private constant EMISSION_PERCENT = 10001;
 
     address public immutable busd;
-    address public authority;
     address public seniorage;
     address public pulse;
     address public snacks;
@@ -38,14 +37,6 @@ contract Zoinks is ERC20, Ownable, ReentrancyGuard, Pausable {
     event BufferUpdated(uint256 buffer);
     event TimeWeightedAveragePrice(uint256 TWAP);
 
-    modifier onlyAuthority {
-        require(
-            msg.sender == authority,
-            "Zoinks: caller is not authorised"
-        );
-        _;
-    }
-
     /**
     * @param busd_ Binance-Peg BUSD token address.
     */
@@ -54,6 +45,7 @@ contract Zoinks is ERC20, Ownable, ReentrancyGuard, Pausable {
         // Mint for liquidity in DEXes.
         address marketMaker = 0xc249aE80c56fE28628d5d3679651D45d96C9d0de;
         _mint(marketMaker, 500000 ether);
+        _grantRole(TRUSTED_TO_TRANSFER_ROLE, msg.sender);
     }
 
     /**
@@ -75,9 +67,10 @@ contract Zoinks is ERC20, Ownable, ReentrancyGuard, Pausable {
         address averagePriceOracle_
     )
         external
-        onlyOwner
+        onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        authority = authority_;
+        _grantRole(AUTHORITY_ROLE, authority_);
+        _grantRole(TRUSTED_TO_TRANSFER_ROLE, authority_);
         seniorage = seniorage_;
         pulse = pulse_;
         snacks = snacks_;
@@ -89,19 +82,27 @@ contract Zoinks is ERC20, Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
-    * @notice Triggers stopped state.
-    * @dev Could be called by the owner in case of resetting addresses.
+    * @notice Adds `accounts_` to the whitelist.
+    * @dev Could be called only by the owner. Those added to the whitelist have the ability 
+    * to send tokens when the contract is paused.
+    * @param accounts_ Account addresses.
     */
-    function pause() external onlyOwner {
-        _pause();
+    function addSetToWhitelist(address[] calldata accounts_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        for (uint256 i = 0; i < accounts_.length; i++) {
+            _grantRole(TRUSTED_TO_TRANSFER_ROLE, accounts_[i]);
+        }
     }
 
     /**
-    * @notice Returns to normal state.
-    * @dev Could be called by the owner in case of resetting addresses.
+    * @notice Removes `accounts_` from the whitelist.
+    * @dev Could be called only by the owner. Those added to the whitelist have the ability 
+    * to send tokens when the contract is paused.
+    * @param accounts_ Account addresses.
     */
-    function unpause() external onlyOwner {
-        _unpause();
+    function removeSetFromWhitelist(address[] calldata accounts_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        for (uint256 i = 0; i < accounts_.length; i++) {
+            _revokeRole(TRUSTED_TO_TRANSFER_ROLE, accounts_[i]);
+        }
     }
 
     /**
@@ -110,7 +111,7 @@ contract Zoinks is ERC20, Ownable, ReentrancyGuard, Pausable {
     * of the emission parts (by multiplying the max amount of percents).
     * @param buffer_ New buffer parameter.
     */
-    function setBuffer(uint256 buffer_) external onlyOwner {
+    function setBuffer(uint256 buffer_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         buffer = buffer_;
         emit BufferUpdated(buffer_);
     }
@@ -129,8 +130,8 @@ contract Zoinks is ERC20, Ownable, ReentrancyGuard, Pausable {
             totalSupply() + amount_ <= MAX_SUPPLY,
             "Zoinks: max supply exceeded"
         );
-        IERC20(busd).safeTransferFrom(msg.sender, seniorage, amount_);
         _mint(msg.sender, amount_);
+        IERC20(busd).safeTransferFrom(msg.sender, seniorage, amount_);
     }
 
     /**
@@ -138,12 +139,28 @@ contract Zoinks is ERC20, Ownable, ReentrancyGuard, Pausable {
     * the emission starts, otherwise nothing happens.
     * @dev Called by the authorised address once every 12 hours.
     */
-    function applyTWAP() external whenNotPaused onlyAuthority {
+    function applyTWAP() external whenNotPaused onlyRole(AUTHORITY_ROLE) {
         IAveragePriceOracle(averagePriceOracle).update();
         uint256 TWAP = IAveragePriceOracle(averagePriceOracle).twapLast();
         emit TimeWeightedAveragePrice(TWAP);
         if (TWAP >= EMISSION_PERCENT) {
             _emission(TWAP);
+        }
+    }
+
+    /**
+    * @notice Hook that is called right before any 
+    * transfer of tokens. This includes minting and burning.
+    * @dev Overriden due to let whitelisters transfer tokens even if contract was paused.
+    * @param from_ Address from which tokens are sent.
+    * @param to_ Address to which tokens are sent.
+    */
+    function _beforeTokenTransfer(address from_, address to_, uint256) internal view override {
+        if (paused()) {
+            require(
+                hasRole(TRUSTED_TO_TRANSFER_ROLE, from_) && hasRole(TRUSTED_TO_TRANSFER_ROLE, to_),
+                "Zoinks: paused"
+            );
         }
     }
 

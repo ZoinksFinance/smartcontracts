@@ -427,7 +427,8 @@ describe("LunchBox", () => {
         // Reward rate expected
         let rewardRate = reward.div(43200);
         // Call from not the PRD contract
-        await expect(lunchBox.notifyRewardAmount(reward)).to.be.revertedWith("LunchBox: caller is not the PoolRewardDistributor contract");
+        await expect(lunchBox.notifyRewardAmount(reward))
+          .to.be.revertedWith("LunchBox: caller is not the PoolRewardDistributor contract");
         // Reward notification
         await snacks.transfer(lunchBox.address, reward);
         

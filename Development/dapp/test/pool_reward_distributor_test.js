@@ -23,7 +23,7 @@ describe("PoolRewardDistributor", () => {
 
   beforeEach(async () => {
     await deployments.fixture(['debug']);
-    [deployer, authority] = await ethers.getSigners();
+    [deployer, authority, alice] = await ethers.getSigners();
 
     poolRewardDistributor = await ethers.getContractAt(
       hre.names.internal.poolRewardDistributor,
@@ -88,7 +88,7 @@ describe("PoolRewardDistributor", () => {
         lunchBox.address,
         seniorage.address,
         authority.address
-    )).to.be.revertedWith("Ownable: caller is not the owner");
+    )).to.be.reverted;
     await expect(poolRewardDistributor.connect(deployer).configure(
       zoinks.address,
       snacks.address,
@@ -104,26 +104,27 @@ describe("PoolRewardDistributor", () => {
     ))
 });
 
-  it('should pause the contract', async () => {
+  it('Should pause the contract', async () => {
     await poolRewardDistributor.pause();
     expect(await poolRewardDistributor.paused()).to.be.true;
     await expect(poolRewardDistributor.distributeRewards(0))
       .to.be.revertedWith("Pausable: paused");
+    await expect(poolRewardDistributor.connect(alice).pause())
+      .to.be.reverted;
   });
 
-  it('should unpause the contract', async () => {
+  it('Should unpause the contract', async () => {
     await expect(poolRewardDistributor.unpause()).to.be.revertedWith("Pausable: not paused");
     await poolRewardDistributor.pause();
     await poolRewardDistributor.unpause();
     expect(await poolRewardDistributor.paused()).to.be.false;
   });
 
-  it('should fail if executed not by authority', async () => {
-    await expect(poolRewardDistributor.distributeRewards(0))
-      .to.be.revertedWith("PoolRewardDistributor: caller is not authorised");
+  it('Should fail if executed not by authority', async () => {
+    await expect(poolRewardDistributor.distributeRewards(0)).to.be.reverted;
   });
 
-  it('should perform distributeRewards', async () => {
+  it('Should perform distributeRewards', async () => {
     const BASE_PERCENT = 10000;
     const SENIORAGE_FEE_PERCENT = 1000;
     const ZOINKS_APE_SWAP_POOL_PERCENT = 2308;
