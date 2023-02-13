@@ -48,7 +48,6 @@ contract LunchBox is ILunchBox, Ownable {
     mapping(address => mapping(uint256 => bool)) private _adjusted;
     mapping(address => uint256) public rewards;
     mapping(address => uint256) public userRewardPerTokenPaid;
-    mapping(address => uint256) public zoinksAmountStoredFor;
     mapping(address => uint256) public snacksAmountStoredFor;
     mapping(address => uint256) public btcSnacksAmountStoredFor;
     mapping(address => uint256) public ethSnacksAmountStoredFor;
@@ -126,7 +125,6 @@ contract LunchBox is ILunchBox, Ownable {
         btc = btc_;
         eth = eth_;
         router = router_;
-        IERC20(busd_).approve(router_, type(uint256).max);
         IERC20(btc_).approve(router_, type(uint256).max);
         IERC20(eth_).approve(router_, type(uint256).max);
     }
@@ -521,27 +519,8 @@ contract LunchBox is ILunchBox, Ownable {
         uint256 reward = rewards[user_];
         if (reward > 0) {
             rewards[user_] = 0;
-            address[] memory path = new address[](2);
-            path[0] = busd;
-            path[1] = zoinks;
-            uint256[] memory amounts = IRouter(router).swapExactTokensForTokens(
-                reward,
-                0,
-                path,
-                address(this),
-                block.timestamp
-            );
-            uint256 zoinksAmount = amounts[1] + zoinksAmountStoredFor[user_];
-            if (ISnacksBase(snacks).sufficientPayTokenAmountOnMint(zoinksAmount)) {
-                uint256 snacksAmount = ISnacksBase(snacks).mintWithPayTokenAmount(zoinksAmount);
-                IERC20(snacks).safeTransfer(user_, snacksAmount);
-                if (zoinksAmountStoredFor[user_] != 0) {
-                    zoinksAmountStoredFor[user_] = 0;
-                }
-                emit RewardPaid(user_, snacksAmount);
-            } else {
-                zoinksAmountStoredFor[user_] += amounts[1];
-            }
+            IERC20(snacks).safeTransfer(user_, reward);
+            emit RewardPaid(user_, reward);
         }
     }
         
@@ -564,7 +543,7 @@ contract LunchBox is ILunchBox, Ownable {
             uint256 leftover = remaining * rewardRate;
             rewardRate = (reward_ + leftover) / rewardsDuration;
         }
-        uint256 balance = IERC20(busd).balanceOf(address(this));
+        uint256 balance = IERC20(snacks).balanceOf(address(this));
         require(
             rewardRate <= balance / rewardsDuration,
             "LunchBox: provided reward too high"
@@ -574,6 +553,11 @@ contract LunchBox is ILunchBox, Ownable {
         emit RewardAdded(reward_);
     }
     
+    /**
+    * @notice Updates reward for the user.
+    * @dev The logic is derived from the StakingRewards contract.
+    * @param user_ User address.
+    */
     function updateRewardForUser(address user_) external onlySnacksPool updateReward(user_) {}
     
     /**

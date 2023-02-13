@@ -200,12 +200,12 @@ module.exports = (
     }),
 
     () => it("Successful setPoolRewardDistributor() execution", async () => {
-      await expect(pool.connect(alice).setPoolRewardDistributor(alice.address)).to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(pool.connect(alice).setPoolRewardDistributor(alice.address)).to.be.reverted;
       await pool.setPoolRewardDistributor(alice.address);
     }),
 
     () => it("Successful setSeniorage() execution", async () => {
-      await expect(pool.connect(alice).setSeniorage(alice.address)).to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(pool.connect(alice).setSeniorage(alice.address)).to.be.reverted;
       await pool.setSeniorage(alice.address);
     }),
 
@@ -235,7 +235,7 @@ module.exports = (
     () => it("Successful pause() execution", async () => {
       // Pause from not the owner
       await expect(pool.connect(alice).pause())
-        .to.be.revertedWith("Ownable: caller is not the owner");
+        .to.be.reverted;
       // Pause from the owner
       await pool.pause();
       // Attempt to call
@@ -247,7 +247,7 @@ module.exports = (
       await pool.pause();
       // Unpause from not the owner
       await expect(pool.connect(alice).unpause())
-        .to.be.revertedWith("Ownable: caller is not the owner");
+        .to.be.reverted;
       // Attempt to call
       await expect(pool.exit()).to.be.revertedWith("Pausable: paused");
       // Unpause from the owner

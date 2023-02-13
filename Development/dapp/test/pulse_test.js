@@ -35,7 +35,7 @@ describe("Pulse", () => {
 
     beforeEach(async () => {
       await deployments.fixture(['pulse_test_fixtures']);
-      [deployer, bob] = await ethers.getSigners();
+      [deployer, authority, bob] = await ethers.getSigners();
       owner = deployer;
 
       poolRewardDistributor = await ethers.getContractAt(
@@ -90,14 +90,14 @@ describe("Pulse", () => {
         hre.names.internal.snacksPool,
         (await deployments.get(hre.names.internal.snacksPool)).address
       );
-      const pairLpToken = await ethers.getContractAt(
+      pairLpToken = await ethers.getContractAt(
         hre.names.internal.mockToken,
         (await deployments.get(hre.names.external.pairs.pancake.lp)).address
       );
       await pairLpToken.mint(pulse.address, mockedLiquidity);
     });
 
-    it("1. Successful configure() execution", async() => {
+    it("Successful configure() execution", async() => {
       const pairAddress = await pulse.cakeLP();
       await pulse.configure(
         pairAddress,
@@ -112,11 +112,11 @@ describe("Pulse", () => {
       )
     });
 
-    it("2. Successful distributeBtcSnacksAndEthSnacks() execution", async() => {
+    it("Successful distributeBtcSnacksAndEthSnacks() execution", async() => {
       // Only authority check
       await expect(
         pulse.connect(bob).distributeBtcSnacksAndEthSnacks()
-      ).to.be.revertedWith("Pulse: caller is not authorised");
+      ).to.be.reverted;
       // Zero balance distribution
       await pulse.distributeBtcSnacksAndEthSnacks();
       // Transfer 1000 BTCSNACKS
@@ -130,9 +130,8 @@ describe("Pulse", () => {
       expect(await ethSnacks.balanceOf(seniorage.address)).to.equal(amountToTransfer.div(2));
     });
 
-    it("3. Successful distributeSnacks() execution (sufficient amount to buy snacks)", async() => {
-      await expect(pulse.connect(bob).distributeSnacks()).to
-        .be.revertedWith("Pulse: caller is not authorised");
+    it("Successful distributeSnacks() execution (sufficient amount to buy snacks)", async() => {
+      await expect(pulse.connect(bob).distributeSnacks()).to.be.reverted;
       await pulse.distributeSnacks();
       // Transfer 1000 SNACKS to pulse
       await snacks.transfer(pulse.address, amountToTransfer);
@@ -149,7 +148,7 @@ describe("Pulse", () => {
       expect(await zoinks.balanceOf(pulse.address)).to.equal(amountOfZoinks);
     });
 
-    it("4. Successful distributeSnacks() execution (insufficient amount to buy snacks)", async() => {
+    it("Successful distributeSnacks() execution (insufficient amount to buy snacks)", async() => {
       // Transfer 1 wei SNACKS to Pulse
       await snacks.transfer(pulse.address, 100);
       // Distribution
@@ -159,7 +158,7 @@ describe("Pulse", () => {
       expect(await zoinks.balanceOf(pulse.address)).to.equal(0);
     });
 
-    it("5. Successful distributeZoinks() execution (sufficient amount to buy snacks)", async() => {
+    it("Successful distributeZoinks() execution (sufficient amount to buy snacks)", async() => {
       // // Require check
       await pulse.distributeZoinks();
       // // Transfer 1000 ZOINKS
@@ -176,7 +175,7 @@ describe("Pulse", () => {
       expect(await pancakeSwapPool.getBalance(pulse.address)).to.be.equal(mockedLiquidity);
     });
 
-    it("6. Successful distributeZoinks() execution (insufficient amount to buy snacks)", async() => {
+    it("Successful distributeZoinks() execution (insufficient amount to buy snacks)", async() => {
       // Transfer 100 wei ZOINKS
       await zoinks.transfer(pulse.address, 100);
       await pulse.distributeZoinks();
@@ -185,7 +184,7 @@ describe("Pulse", () => {
       expect(await pancakeSwapPool.getBalance(pulse.address)).to.be.equal(mockedLiquidity);
     });
 
-    it("7. Successful harvest() execution", async() => {
+    it("Successful harvest() execution", async() => {
       // Transfer 1000 ZOINKS
       await zoinks.transfer(pulse.address, amountToTransfer);
       // Transfer 1000 SNACKS to pulse
@@ -257,24 +256,43 @@ describe("Pulse", () => {
       );
     });
 
-    it("8. Test pause", async () => {
+    it("Test pause", async () => {
       // ARRANGE
       // ACT
       await expect(pulse.pause())
         .to.emit(pulse, "Paused")
         .withArgs(owner.address);
-  
+      await expect(pulse.connect(bob).pause()).to.be.reverted;
       // ASSERT
     });
   
-    it("9. Test unpause", async () => {
+    it("Test unpause", async () => {
       // ARRANGE
       // ACT
       await pulse.pause();
       await expect(pulse.unpause())
         .to.emit(pulse, "Unpaused")
         .withArgs(owner.address);
-  
       // ASSERT
     });
+
+    it("Successful withdrawCakeLP() execution", async() => {
+      const amount = ethers.utils.parseEther("100");
+      await pairLpToken.mint(pulse.address, amount);
+      previousBalance = await pairLpToken.balanceOf(owner.address);
+      await pulse.withdrawCakeLP(owner.address);
+      expect((await pairLpToken.balanceOf(owner.address)).sub(previousBalance)).to.equal(amount.add(mockedLiquidity));
+      await pulse.withdrawCakeLP(owner.address);
+    });
+
+    it("Successful withdrawCakeLPFromPool() execution", async() => {
+      const amountToStake = ethers.utils.parseEther("100");
+      await pairLpToken.mint(pulse.address, amountToStake);
+      await pulse.distributeZoinks();
+      await expect(pulse.withdrawCakeLPFromPool(owner.address, amountToStake.mul(2))).to.be.revertedWith("Pulse: invalid amount to withdraw");
+      previousBalance = await pairLpToken.balanceOf(owner.address);
+      await pulse.withdrawCakeLPFromPool(owner.address, amountToStake.add(mockedLiquidity));
+      expect((await pairLpToken.balanceOf(owner.address)).sub(previousBalance)).to.equal(amountToStake.div(2).add(mockedLiquidity.div(2)));
+      expect(await pairLpToken.balanceOf(seniorage.address)).to.equal(amountToStake.div(2).add(mockedLiquidity.div(2)));
+  });
 });

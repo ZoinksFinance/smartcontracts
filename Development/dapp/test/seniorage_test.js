@@ -3,6 +3,8 @@ const hre = require("hardhat");
 const { ethers, deployments } = hre;
 const {
   mockedResultOfSwap,
+  mintNativeTokens,
+  withImpersonatedSigner,
   mockedLiquidity,
   ZERO_ADDRESS,
   ZERO,
@@ -31,7 +33,6 @@ describe("Seniorage", () => {
   let snacks;
   let ethSnacks;
   let btcSnacks;
-  let pair;
 
   let amountToTransfer = ethers.utils.parseEther("3333");
 
@@ -90,9 +91,17 @@ describe("Seniorage", () => {
       hre.names.internal.seniorage,
       (await deployments.get(hre.names.internal.seniorage)).address
     );
-    pair = await ethers.getContractAt(
+    pancakePair = await ethers.getContractAt(
       hre.names.internal.mockToken,
       (await deployments.get(hre.names.external.pairs.pancake.lp)).address
+    );
+    apePair = await ethers.getContractAt(
+      hre.names.internal.mockToken,
+      (await deployments.get(hre.names.external.pairs.ape.lp)).address
+    );
+    biPair = await ethers.getContractAt(
+      hre.names.internal.mockToken,
+      (await deployments.get(hre.names.external.pairs.bi.lp)).address
     );
 
     const snacksToMint = amountToTransfer.mul(10);
@@ -121,7 +130,7 @@ describe("Seniorage", () => {
     await btcSnacks.mintWithPayTokenAmount(btcSnacksToMint);
   });
 
-  it("1. Successful distributeNonBusdCurrencies() execution", async () => {
+  it("Successful distributeNonBusdCurrencies() execution", async () => {
     // ARRANGE. Fase 1 + 2
     // Transfer of all non BUSD tokens to seniorage in the amount of 3333 wei
     await btc.transfer(seniorage.address, amountToTransfer);
@@ -136,8 +145,7 @@ describe("Seniorage", () => {
 
     // ACT. Fase 1
     // Distribution
-    await expect(seniorage.connect(devWallet).distributeNonBusdCurrencies(0, 0, 0))
-      .to.be.revertedWith("Seniorage: caller is not authorised");
+    await expect(seniorage.connect(devWallet).distributeNonBusdCurrencies(0, 0, 0)).to.be.reverted;
     await busd.mint(lunchBoxAddress, busdToLuchBox);
     await seniorage.distributeNonBusdCurrencies(0, 0, 0);
     const fivePercentOfBalance = amountToTransfer.mul(5).div(100);
@@ -203,7 +211,7 @@ describe("Seniorage", () => {
     // ASSERT. Fase 2
   });
 
-  it('2. Test all rejections of the distributeBusd() execution', async () => {
+  it('Test all rejections of the distributeBusd() execution', async () => {
     // ARRANGE
     const oldBalance = await busd.balanceOf(seniorage.address);
 
@@ -211,21 +219,20 @@ describe("Seniorage", () => {
     // Attempt to distribute when balance is zero
     await busd.burn(seniorage.address, oldBalance);
     await seniorage.distributeBusd(
-      ZERO, ZERO, ZERO, ZERO, ZERO
+      ZERO, ZERO, ZERO
     );
     await busd.mint(seniorage.address, oldBalance);
 
     // ASSERT
     await expect(seniorage.connect(devWallet).distributeBusd(
-      ZERO, ZERO, ZERO, ZERO, ZERO
-    )).to.be.revertedWith("Seniorage: caller is not authorised");
+      ZERO, ZERO, ZERO
+    )).to.be.reverted;
   });
 
-  describe('3. Variations of distributeBusd() execution', () => {
+  describe('Variations of distributeBusd() execution', () => {
     // ARRANGE. Fase 1
     const taxPercentForBuy = 5;
-    const senioragePercent = 5455;
-    const pulsePercent = 4545;
+    const pulsePercent = 5000;
 
     const seniorageBusdBalance = ethers.utils.parseEther("5000");
 
@@ -240,7 +247,7 @@ describe("Seniorage", () => {
     ) => {
       await busd.mint(seniorage.address, _seniorageBusdBalance);
 
-      await pair.mint(seniorage.address, _mockedLiquidity);
+      await pancakePair.mint(seniorage.address, _mockedLiquidity);
       await eth.mint(seniorage.address, _mockedResultOfSwap);
       await btc.mint(seniorage.address, _mockedResultOfSwap);
 
@@ -250,7 +257,7 @@ describe("Seniorage", () => {
       await zoinks.transfer(seniorage.address, _mockedResultOfSwap);
     };
 
-    it("3.1. Successful distributeBusd() execution - check BtcSnacks and EthSnacks", async () => {
+    it("Successful distributeBusd() execution - check BtcSnacks and EthSnacks", async () => {
       // ARRANGE. Fase 2
       await prepareTokensForDistribution(
         seniorageBusdBalance,
@@ -273,23 +280,19 @@ describe("Seniorage", () => {
 
       // the local variable is in distributeBusd function
       const differenceForEthAndBtcSnacks = amountSnacksToMint.sub(amountSnacksToMint.mul(taxPercentForBuy).div(100));
-
-      const anySnacksForSeniorageWallet = differenceForEthAndBtcSnacks.mul(senioragePercent).div(10000);
       const anySnacksForPulse = differenceForEthAndBtcSnacks.mul(pulsePercent).div(10000);
 
       // ACT
       await seniorage.distributeBusd(
-        ZERO, ZERO, ZERO, ZERO, ZERO
+        ZERO, ZERO, ZERO
       );
 
       // ASSERT
-      expect(await btcSnacks.balanceOf(seniorageWallet.address)).to.be.equal(anySnacksForSeniorageWallet);
       expect(await btcSnacks.balanceOf(pulse.address)).to.be.equal(anySnacksForPulse);
-      expect(await ethSnacks.balanceOf(seniorageWallet.address)).to.be.equal(anySnacksForSeniorageWallet);
       expect(await ethSnacks.balanceOf(pulse.address)).to.be.equal(anySnacksForPulse);
     });
 
-    it("3.2. Successful distributeBusd() execution - check Snacks distribution", async () => {
+    it("Successful distributeBusd() execution - check Snacks distribution", async () => {
       // ARRANGE. Fase 2
       await prepareTokensForDistribution(
         seniorageBusdBalance,
@@ -314,46 +317,17 @@ describe("Seniorage", () => {
 
       // ACT
       await seniorage.distributeBusd(
-        ZERO, ZERO, ZERO, ZERO, ZERO
+        ZERO, ZERO, ZERO
       );
 
       // ASSERT
       expect(await snacks.balanceOf(pulse.address)).to.be.equal(differenceForSnacks);
     });
 
-    it("3.3. Successful distributeBusd() execution - check Snacks supplying liquidity", async () => {
-      // ARRANGE. Fase 2
-      await prepareTokensForDistribution(
-        seniorageBusdBalance,
-        amountToSwapOnZoinksToSupplyLiquidity,
-        amountToSwapOnZoinksToSupplyLiquidity
-      );
-
-      await mockSwaps(
-        'PancakeSwapRouter',
-        deployments,
-        ZERO,
-        owner.address,
-        amountToSwapOnZoinksToSupplyLiquidity
-      );
-      await mockLiquidity(
-        amountToSwapOnZoinksToSupplyLiquidity,
-        deployments
-      );
-
-      // ACT
-      await seniorage.distributeBusd(
-        ZERO, ZERO, ZERO, ZERO, ZERO
-      );
-
-      // ASSERT
-      expect(await pair.balanceOf(pulse.address)).to.be.equal(amountToSwapOnZoinksToSupplyLiquidity);
-    });
-
-    it("3.4. Successful distributeBusd() execution (insufficient amounts)", async () => {
+    it("Successful distributeBusd() execution (insufficient amounts)", async () => {
       const insufficientAmount = 1000;
       const sufficientAmount = ethers.utils.parseEther("100");
-      await pair.transfer(seniorage.address, ethers.utils.parseEther("1500"));
+      await pancakePair.transfer(seniorage.address, ethers.utils.parseEther("1500"));
       // After each swap we get 1000 wei
       await mockSwaps(
         "PancakeSwapRouter",
@@ -367,7 +341,7 @@ describe("Seniorage", () => {
         deployments
       );
       // Distribution
-      await seniorage.distributeBusd(0, 0, 0, 0, 0);
+      await seniorage.distributeBusd(0, 0, 0);
       // Check stored amounts
       expect(await seniorage.btcAmountStored()).to.equal(1000);
       expect(await seniorage.ethAmountStored()).to.equal(1000);
@@ -389,7 +363,7 @@ describe("Seniorage", () => {
         deployments
       );
       // Distribution
-      await seniorage.distributeBusd(0, 0, 0, 0, 0);
+      await seniorage.distributeBusd(0, 0, 0);
       // Check stored amounts
       expect(await seniorage.btcAmountStored()).to.equal(0);
       expect(await seniorage.ethAmountStored()).to.equal(0);
@@ -397,21 +371,25 @@ describe("Seniorage", () => {
     });
   });
 
-  it("4. Successful configureCurrencies() execution", async () => {
+  it("Successful configureCurrencies() execution", async () => {
     // ARRANGE
 
     // ACT
     await expect(seniorage.connect(devWallet).configureCurrencies(
-      pair.address,
+      pancakePair.address,
+      apePair.address,
+      biPair.address,
       zoinks.address,
       btc.address,
       eth.address,
       snacks.address,
       btcSnacks.address,
       ethSnacks.address
-    )).to.be.revertedWith("Ownable: caller is not the owner");
+    )).to.be.reverted;
     await seniorage.configureCurrencies(
-      pair.address,
+      pancakePair.address,
+      apePair.address,
+      biPair.address,
       zoinks.address,
       btc.address,
       eth.address,
@@ -420,7 +398,9 @@ describe("Seniorage", () => {
       ethSnacks.address
     );
     await seniorage.configureCurrencies(
-      pair.address,
+      pancakePair.address,
+      apePair.address,
+      biPair.address,
       btc.address,
       eth.address,
       zoinks.address,
@@ -432,7 +412,7 @@ describe("Seniorage", () => {
     // ASSERT
   });
 
-  it("5. Successful configureWallets() execution", async () => {
+  it("Successful configureWallets() execution", async () => {
     // ARRANGE
 
     // ACT
@@ -444,9 +424,8 @@ describe("Seniorage", () => {
       ZERO_ADDRESS,
       ZERO_ADDRESS,
       ZERO_ADDRESS,
-      ZERO_ADDRESS,
       ZERO_ADDRESS
-    )).to.be.revertedWith("Ownable: caller is not the owner");
+    )).to.be.reverted;
     await seniorage.configureWallets(
       bdmWallet.address,
       crmWallet.address,
@@ -455,59 +434,95 @@ describe("Seniorage", () => {
       devWallet.address,
       marketingFundWallet.address,
       situationalFundWallet.address,
-      seniorageWallet.address,
       multisigWallet.address
     );
 
     // ASSERT
   });
 
-  it("6. Successful setAuthority() execution", async () => {
-    // ARRANGE
-
-    // ACT
-    await expect(seniorage.connect(devWallet).setAuthority(owner.address))
-      .to.be.revertedWith("Ownable: caller is not the owner");
-    await seniorage.setAuthority(owner.address);
-
-    // ASSERT
-  });
-
-  it("7. Successful setPulse() execution", async () => {
+  it("Successful setPulse() execution", async () => {
     // ARRANGE
 
     // ACT
     await expect(seniorage.connect(devWallet).setPulse(pulse.address))
-      .to.be.revertedWith("Ownable: caller is not the owner");
+      .to.be.reverted;
     await seniorage.setPulse(pulse.address);
 
     // ASSERT
   });
 
-  it("8. Successful pause() execution", async () => {
+  it("Successful pause() execution", async () => {
     // Pause from not the owner
     await expect(seniorage.connect(devWallet).pause())
-      .to.be.revertedWith("Ownable: caller is not the owner");
+      .to.be.reverted;
     // Pause from the owner
     await seniorage.pause();
     // Attempt to call
     await expect(seniorage.distributeNonBusdCurrencies(0, 0, 0)).to.be.revertedWith("Pausable: paused");
   });
 
-  it("9. Successful unpause() execution", async () => {
+  it("Successful unpause() execution", async () => {
     // Pause from not the owner
     await expect(seniorage.connect(devWallet).pause())
-      .to.be.revertedWith("Ownable: caller is not the owner");
+      .to.be.reverted;
     // Pause from the owner
     await seniorage.pause();
     // Attempt to call
     await expect(seniorage.distributeNonBusdCurrencies(0, 0, 0)).to.be.revertedWith("Pausable: paused");
     // Unpause from not the owner
     await expect(seniorage.connect(devWallet).unpause())
-      .to.be.revertedWith("Ownable: caller is not the owner");
+      .to.be.reverted;
     // Unpause from the owner
     await seniorage.unpause();
     // Attempt to call
     await seniorage.distributeNonBusdCurrencies(0, 0, 0);
+  });
+
+  it("Successful provideLiquidity() execution", async () => {
+    // BUSD amount stored = 0
+    await seniorage.provideLiquidity(0, 0);
+    await withImpersonatedSigner(seniorage.address, async (seniorageSigner) => {
+      const hexAmountOfNativeTokens = '0x10000000000000000000';
+      await mintNativeTokens(seniorage.address, hexAmountOfNativeTokens);
+      await busd.connect(seniorageSigner).transfer(pulse.address, await busd.balanceOf(seniorage.address));
+    });
+    expect(await seniorage.busdAmountStored()).to.equal(0);
+    expect(await busd.balanceOf(seniorage.address)).to.equal(0);
+    ONE = ethers.utils.parseEther("1");
+    await btc.transfer(seniorage.address, ONE);
+    await eth.transfer(seniorage.address, ONE);
+    await zoinks.transfer(seniorage.address, ONE);
+    await mockSwaps(
+      "PancakeSwapRouter",
+      deployments,
+      0,
+      owner.address,
+      ONE
+    );
+    await busd.transfer(seniorage.address, 10000);
+    await seniorage.distributeBusd(0, 0, 0);
+    expect(await seniorage.busdAmountStored()).to.equal(1500);
+    await mockLiquidity(
+      mockedLiquidity,
+      deployments
+    );
+    await pancakePair.transfer(seniorage.address, mockedLiquidity);
+    await seniorage.provideLiquidity(0, 0);
+    expect(await pancakePair.balanceOf(pulse.address)).to.equal(mockedLiquidity);
+  });
+
+  it("Successful withdrawLP() execution", async() => {
+    const amount = ethers.utils.parseEther("100");
+    await pancakePair.mint(seniorage.address, amount);
+    await apePair.mint(seniorage.address, amount);
+    await biPair.mint(seniorage.address, amount);
+    const pancakePairBalanceBefore = await pancakePair.balanceOf(owner.address);
+    const apePairBalanceBefore = await apePair.balanceOf(owner.address);
+    const biPairBalanceBefore = await biPair.balanceOf(owner.address);
+    await seniorage.withdrawLP(owner.address);
+    expect((await pancakePair.balanceOf(owner.address)).sub(pancakePairBalanceBefore)).to.equal(amount);
+    expect((await apePair.balanceOf(owner.address)).sub(apePairBalanceBefore)).to.equal(amount);
+    expect((await biPair.balanceOf(owner.address)).sub(biPairBalanceBefore)).to.equal(amount);
+    await seniorage.withdrawLP(owner.address);
   });
 });

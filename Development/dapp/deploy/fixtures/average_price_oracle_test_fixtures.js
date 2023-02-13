@@ -8,7 +8,7 @@ const {
   mockedReserve0,
   mockedReserve1,
   mockSwaps,
-  mockPrice1Cumulative,
+  mockPrice0Cumulative,
   mockReserves,
   mockLiquidity,
   mockGetPair
@@ -78,7 +78,7 @@ module.exports = async ({
     deployments
   );
 
-  await mockPrice1Cumulative(
+  await mockPrice0Cumulative(
     mockedReserve1.div(mockedReserve0).mul(3600 * 12)
     .mul(
       ethers.BigNumber.from('2').pow(ethers.BigNumber.from('112'))

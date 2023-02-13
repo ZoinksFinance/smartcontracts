@@ -50,6 +50,7 @@ module.exports = async ({
 
   await deploy(hre.names.internal.poolRewardDistributor, {
     from: deployer,
+    args: [busdAddress, pancakeSwapRouterAddress],
     skipIfAlreadyDeployed: skipDeploymentIfAlreadyDeployed,
     log: true
   });
@@ -78,6 +79,12 @@ module.exports = async ({
   });
   const snacksAddress = (await deployments.get(hre.names.internal.snacks)).address;
 
+  await deploy(hre.names.internal.holdingFeeDistributor, {
+    from: deployer,
+    skipIfAlreadyDeployed: skipDeploymentIfAlreadyDeployed,
+    log: true
+  });
+
   await deploy(hre.names.internal.snacksPool, {
     from: deployer,
     args: [
@@ -102,6 +109,12 @@ module.exports = async ({
       ethAddress,
       pancakeSwapRouterAddress
     ],
+    skipIfAlreadyDeployed: skipDeploymentIfAlreadyDeployed,
+    log: true
+  });
+
+  await deploy(hre.names.internal.systemStopper, {
+    from: deployer,
     skipIfAlreadyDeployed: skipDeploymentIfAlreadyDeployed,
     log: true
   });

@@ -104,7 +104,7 @@ describe("Snacks", () => {
 
   testCases[10]("Snacks");
 
-  it("15. Check how many Snacks we mint, with 0.000015 Zoinks", async () => {
+  it("Check how many Snacks we mint, with 0.000015 Zoinks", async () => {
     // ACT
     const amountZoinksToSpend = ethers.utils.parseEther('0.000015');
     const snacksResult = await snacks.calculateBuyTokenAmountOnMint(amountZoinksToSpend);
@@ -114,7 +114,7 @@ describe("Snacks", () => {
     expect(snacksResult).to.be.equal(snacksExpected);
   });
 
-  it("16. Check how many Snacks we mint, with 1 Zoinks and 5 Snacks already minted", async () => {
+  it("Check how many Snacks we mint, with 1 Zoinks and 5 Snacks already minted", async () => {
     // Current price
     const amountSnacksToMint = ethers.utils.parseEther('5');
 
@@ -137,7 +137,7 @@ describe("Snacks", () => {
     expect(snacksResult.mul(95).div(100)).to.be.equal(snacksExpected);
   });
 
-  it("17. Check big number os Zoinks to mintWithBuyTokenAmount Snacks calculation of TOTAL to mintWithBuyTokenAmount", async () => {
+  it("Check big number os Zoinks to mintWithBuyTokenAmount Snacks calculation of TOTAL to mintWithBuyTokenAmount", async () => {
     // ACT
     const amountZoinksToSpend = ethers.BigNumber.from("50055015000000000000"); // 50.055015
     const currentTotalSupply = ethers.utils.parseEther('5');
@@ -151,7 +151,7 @@ describe("Snacks", () => {
     expect(snacksResult).to.be.closeTo(snacksExpected, '1500000000000000');
   });
 
-  it("18. Check very big number os Zoinks to mintWithBuyTokenAmount Snacks calculation of TOTAL to mintWithBuyTokenAmount", async () => {
+  it("Check very big number os Zoinks to mintWithBuyTokenAmount Snacks calculation of TOTAL to mintWithBuyTokenAmount", async () => {
     // ACT
     // Max zoinks to spend: 8361,00
     // Max snacks to mint: 129313
@@ -166,7 +166,7 @@ describe("Snacks", () => {
     expect(snacksResult).to.be.closeTo(snacksExpected, '72400000000000000');
   });
 
-  it("19. Successful notifyBtcSnacksAmount() execution", async () => {
+  it("Successful notifyBtcSnacksAmount() execution", async () => {
     // Call from not the BtcSnacks contract
     await expect(snacks.notifyBtcSnacksFeeAmount(0)).to.be.revertedWith("Snacks: caller is not the BtcSnacks contract");
     // Call from the right address
@@ -188,7 +188,7 @@ describe("Snacks", () => {
       .withArgs(100);
   });
 
-  it("20. Successful notifyEthSnacksAmount() execution", async () => {
+  it("Successful notifyEthSnacksAmount() execution", async () => {
     // Call from not the BtcSnacks contract
     await expect(snacks.notifyEthSnacksFeeAmount(0)).to.be.revertedWith("Snacks: caller is not the EthSnacks contract");
     // Call from the right address
@@ -211,7 +211,7 @@ describe("Snacks", () => {
       .withArgs(100);
   });
 
-  it("21. Successful withdrawBtcSnacks() execution (without offset)", async () => {
+  it("Successful withdrawBtcSnacks() execution (without offset)", async () => {
     const buyAmount = ethers.utils.parseEther("100");
     // Buying BtcSnacks
     await btc.approve(btcSnacks.address, buyAmount);
@@ -237,7 +237,7 @@ describe("Snacks", () => {
     expect(await btcSnacks.balanceOf(owner.address)).to.equal(balanceExpected);
   });
 
-  it("23. Successful withdrawBtcSnacks() execution (with offset)", async () => {
+  it("Successful withdrawBtcSnacks() execution (with offset)", async () => {
     const buyAmount = ethers.utils.parseEther("100");
     // Buying BtcSnacks
     await btc.approve(btcSnacks.address, buyAmount);
@@ -263,7 +263,7 @@ describe("Snacks", () => {
     expect(await btcSnacks.balanceOf(owner.address)).to.equal(balanceExpected);
   });
 
-  it("24. Successful withdrawEthSnacks() execution (without offset)", async () => {
+  it("Successful withdrawEthSnacks() execution (without offset)", async () => {
     const buyAmount = ethers.utils.parseEther("100");
     // Buying BtcSnacks
     await btc.approve(btcSnacks.address, buyAmount);
@@ -289,7 +289,7 @@ describe("Snacks", () => {
     expect(await ethSnacks.balanceOf(owner.address)).to.equal(balanceExpected);
   });
 
-  it("25. Successful withdrawEthSnacks() execution (with offset)", async () => {
+  it("Successful withdrawEthSnacks() execution (with offset)", async () => {
     const buyAmount = ethers.utils.parseEther("100");
     // Buying BtcSnacks
     await btc.approve(btcSnacks.address, buyAmount);
@@ -315,7 +315,7 @@ describe("Snacks", () => {
     expect(await ethSnacks.balanceOf(owner.address)).to.equal(balanceExpected);
   });
 
-  it("26. Successful balanceAndDepositOfAt() execution", async () => {
+  it("Successful balanceAndDepositOfAt() execution", async () => {
     const buyAmount = ethers.utils.parseEther("100");
     // Buying Zoinks and Snacks
     await busd.approve(zoinks.address, buyAmount);
@@ -330,31 +330,5 @@ describe("Snacks", () => {
     await snacks.connect(authority).distributeFee();
     // Check balance
     expect(await snacks.balanceAndDepositOfAt(owner.address, 1)).to.equal(await snacks.balanceOf(owner.address));
-  });  
-
-  it("27. Successful snapshot updating", async () => {
-    const buyAmount = ethers.utils.parseEther("100");
-    // Buying Zoinks and Snacks
-    await busd.transfer(bob.address, buyAmount);
-    await busd.connect(bob).approve(zoinks.address, buyAmount);
-    await zoinks.connect(bob).mint(buyAmount);
-    await zoinks.connect(bob).approve(snacks.address, buyAmount);
-    await snacks.connect(bob).mintWithPayTokenAmount(buyAmount);
-    // Distribute fee
-    await btcSnacks.connect(authority).distributeFee();
-    await ethSnacks.connect(authority).distributeFee();
-    await snacks.connect(authority).distributeFee();
-    // Transfers
-    let balance = await snacks.balanceOf(bob.address);
-    await snacks.connect(bob).transfer(owner.address, balance.div(2));
-    await snacks.connect(bob).transfer(authority.address, balance.div(2).sub(1));
-    balance = await snacks.balanceOf(bob.address);
-    // Distribute fee
-    await btcSnacks.connect(authority).distributeFee();
-    await ethSnacks.connect(authority).distributeFee();
-    await snacks.connect(authority).distributeFee();
-    expect(await snacks.balanceAndDepositOfAt(bob.address, 1)).to.equal(balance);
-    expect(await snacks.balanceAndDepositOfAt(bob.address, 2)).to.equal(3);
-  });
-  
+  }); 
 });

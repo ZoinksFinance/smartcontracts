@@ -3,17 +3,16 @@ pragma solidity 0.8.15;
 
 import "@openzeppelin/contracts/utils/Arrays.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
-import "@prb/math/contracts/PRBMathUD60x18.sol";
 
-import "./base/SnacksBase.sol";
+import "./base/SnacksBaseV2.sol";
 import "./interfaces/ISnacks.sol";
 import "./interfaces/IMultipleRewardPool.sol";
 import "./interfaces/ISnacksPool.sol";
 import "./interfaces/ILunchBox.sol";
 
-contract Snacks is ISnacks, SnacksBase {
-    using EnumerableSet for EnumerableSet.AddressSet;
+contract Snacks is ISnacks, SnacksBaseV2 {
     using SafeERC20 for IERC20;
+    using EnumerableSet for EnumerableSet.AddressSet;
     using Arrays for uint256[];
     using Counters for Counters.Counter;
     using PRBMathUD60x18 for uint256;
@@ -68,7 +67,7 @@ contract Snacks is ISnacks, SnacksBase {
     }
     
     constructor()
-        SnacksBase(
+        SnacksBaseV2(
             STEP,
             CORRELATION_FACTOR,
             TOTAL_SUPPLY_FACTOR,
@@ -107,7 +106,7 @@ contract Snacks is ISnacks, SnacksBase {
         address ethSnacks_
     )
         external
-        onlyOwner
+        onlyRole(DEFAULT_ADMIN_ROLE)
     {
         _configure(
             zoinks_,
@@ -351,7 +350,7 @@ contract Snacks is ISnacks, SnacksBase {
     * @dev Overriden for taking into account not excluded holders deposits.
     * @return Total balance and deposit amount of all excluded holders.
     */
-    function getExcludedBalance() public override view returns (uint256) {
+    function getExcludedBalance() public view returns (uint256) {
         uint256 excludedBalance;
         for (uint256 i = 0; i < _excludedHolders.length(); i++) {
             excludedBalance += balanceOf(_excludedHolders.at(i));
@@ -368,6 +367,12 @@ contract Snacks is ISnacks, SnacksBase {
     function getCurrentSnapshotId() public view returns (uint256) {
         return _currentSnapshotId.current();
     }
+
+    /**
+    * @notice Hook that is called inside `distributeFee()` function.
+    * @dev No implementation.
+    */
+    function _beforeDistributeFee(uint256) internal pure override {}
     
     /**
     * @notice Hook that is called inside `distributeFee()` function.
@@ -410,14 +415,15 @@ contract Snacks is ISnacks, SnacksBase {
     }
     
     /**
-    * @notice Updates snapshots after the values are modified. 
+    * @notice Updates snapshots before the values are modified. 
     * @dev Executed for `_mint()`, `_burn()`, and `_transfer()` functions.
     * @param from_ Address from which tokens are sent.
     * @param to_ Address to which tokens are sent.
     */
-    function _afterTokenTransfer(
+    function _beforeTokenTransfer(
         address from_,
-        address to_
+        address to_,
+        uint256
     )
         internal
         override
@@ -433,6 +439,13 @@ contract Snacks is ISnacks, SnacksBase {
             _updateAccountBalanceAndDeposit(to_);
         }
     }
+
+    /**
+    * @notice Hook that is called right after any 
+    * transfer of tokens. This includes minting and burning.
+    * @dev No implementation.
+    */
+    function _afterTokenTransfer(address, address, uint256) internal pure override {}
     
     /**
     * @notice Sends the calculated amount of fee earned in BtcSnacks token to the holder 
@@ -514,12 +527,8 @@ contract Snacks is ISnacks, SnacksBase {
     */
     function _updateSnapshot(Snapshots storage snapshots_, uint256 currentValue_) private {
         uint256 currentId = getCurrentSnapshotId();
-        uint256 lastSnapshotId = _lastSnapshotId(snapshots_.ids);
-        if (lastSnapshotId < currentId) {
+        if (_lastSnapshotId(snapshots_.ids) < currentId) {
             snapshots_.ids.push(currentId);
-            snapshots_.values.push(currentValue_);
-        } else if (lastSnapshotId == currentId && currentId != 0) {
-            snapshots_.values.pop();
             snapshots_.values.push(currentValue_);
         }
     }
@@ -594,21 +603,23 @@ contract Snacks is ISnacks, SnacksBase {
         view
         returns (uint256, uint256)
     {
+        uint256 feeSnapshotId;
         uint256 cumulativeBalanceAndDeposit;
         uint256 cumulativeHolderSupply;
         uint256 cumulativeFeeAmount;
-        uint256 feeSnapshotId;
         uint256 i;
         if (flag_) {
+            uint256[] memory btcSnacksFeeSnapshots = _btcSnacksFeeSnapshots;
             for (i = startIndex_; i < endIndex_; i++) {
-                feeSnapshotId = _btcSnacksFeeSnapshots[i];
+                feeSnapshotId = btcSnacksFeeSnapshots[i];
                 cumulativeBalanceAndDeposit += balanceAndDepositOfAt(msg.sender, feeSnapshotId);
                 cumulativeHolderSupply += holderSupplyAt(feeSnapshotId);
                 cumulativeFeeAmount += snapshotIdToBtcSnacksFeeAmount[feeSnapshotId];
             }
         } else {
+            uint256[] memory ethSnacksFeeSnapshots = _ethSnacksFeeSnapshots;
             for (i = startIndex_; i < endIndex_; i++) {
-                feeSnapshotId = _ethSnacksFeeSnapshots[i];
+                feeSnapshotId = ethSnacksFeeSnapshots[i];
                 cumulativeBalanceAndDeposit += balanceAndDepositOfAt(msg.sender, feeSnapshotId);
                 cumulativeHolderSupply += holderSupplyAt(feeSnapshotId);
                 cumulativeFeeAmount += snapshotIdToEthSnacksFeeAmount[feeSnapshotId];

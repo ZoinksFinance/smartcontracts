@@ -102,7 +102,7 @@ module.exports = {
       bsc_mainnet: {
           url: mainnetBscUrl,
           chainId: mainnetBscChainId,
-          accounts: {mnemonic: process.env.MNEMONIC},
+          accounts: {mnemonic: process.env.MAINNET_DEPLOY_MNEMONIC},
           saveDeployments: true
       },
       bsc_testnet: {

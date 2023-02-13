@@ -4,7 +4,7 @@ module.exports.tags = ["ethernal"];
 module.exports.dependencies = [
     "ethernal_workspace_reset", 
     "testnet_predeploy", 
-    "configure", 
+    "ethernal_configure", 
     "all_approves",
     "sync",
 ];

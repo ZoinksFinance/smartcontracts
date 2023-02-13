@@ -1,0 +1,24 @@
+name: increase time CI/CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: 'Increase offset in seconds'
+        required: true
+        type: integer
+        default: 43200
+
+jobs:
+
+  increaseTime:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invoke hardhat time script
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HH_HOST }}
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORD }}
+          port: ${{ secrets.PORT }}
+          script: ~/hhtime ${{ github.event.inputs.seconds }}

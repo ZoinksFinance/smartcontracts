@@ -8,7 +8,7 @@ describe("Backend chain test", () => {
         await deployments.fixture(['general_test_fixtures']);
     });
 
-    it("1. Call contracts every 12/24h", async () => {
+    it("Call contracts every 12/24h", async () => {
         // ARRANGE
         const period = ethers.BigNumber.from(43200); // 43200 = 12 hours. 86400 = 1 day in seconds
         // ACT

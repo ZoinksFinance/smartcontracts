@@ -12,7 +12,7 @@ const mockedResultOfSwap = ethers.utils.parseEther("2");
 const mockedLiquidity = ethers.utils.parseEther("1");
 const mockedReserve0 = ethers.utils.parseEther("10");
 const mockedReserve1 = ethers.utils.parseEther("20");
-const skipDeploymentIfAlreadyDeployed = false;
+const skipDeploymentIfAlreadyDeployed = true;
 
 ////////////////////////////////////////////
 // Constants Ends
@@ -117,8 +117,8 @@ const mockSwaps = async (
   );
 };
 
-const mockPrice1Cumulative = async (
-  mockedPrice1Cumulative,
+const mockPrice0Cumulative = async (
+  mockedPrice0Cumulative,
   deployments
 ) => {
   const pancakeZoinksBusdPairMockContract = await hre.ethers.getContractAt(
@@ -139,27 +139,27 @@ const mockPrice1Cumulative = async (
     (await deployments.get(hre.names.external.pairs.pancake.pair)).address
   );
   const price1CumulativeLastSelector = pancakeZoinksBusdPair
-    .interface.encodeFunctionData("price1CumulativeLast");
+    .interface.encodeFunctionData("price0CumulativeLast");
 
   await apeZoinksBusdPairMockContract.givenMethodReturn(
     price1CumulativeLastSelector,
     hre.ethers.utils.defaultAbiCoder.encode(
       ['uint256'],
-      [mockedPrice1Cumulative]
+      [mockedPrice0Cumulative]
     )
   );
   await biZoinksBusdPairMockContract.givenMethodReturn(
     price1CumulativeLastSelector,
     hre.ethers.utils.defaultAbiCoder.encode(
       ['uint256'],
-      [mockedPrice1Cumulative]
+      [mockedPrice0Cumulative]
     )
   );
   await pancakeZoinksBusdPairMockContract.givenMethodReturn(
     price1CumulativeLastSelector,
     hre.ethers.utils.defaultAbiCoder.encode(
       ['uint256'],
-      [mockedPrice1Cumulative]
+      [mockedPrice0Cumulative]
     )
   );
 };
@@ -420,7 +420,7 @@ const emptyStage = (message) =>
       log(message);
   };
 
-const backendCall1224 = async (hre) => {
+const backendCall1224 = async (hre, expects) => {
   let authority;
 
   let zoinks;
@@ -468,28 +468,75 @@ const backendCall1224 = async (hre) => {
 
   // ACT
   // 1. Zoinks - applyTWAP
-  await zoinks.connect(authority).applyTWAP();
+  const applyTwapTx = await zoinks.connect(authority).applyTWAP();
+  if (expects !== undefined) {
+    await expects[0](applyTwapTx);
+  }
   // 2. BtcSnacks - distributeFee
-  await btcSnacks.connect(authority).distributeFee();
+  const metadataForDistributeFeeBtcSnacksExpect = expects !== undefined ? await expects[1].before() : {};
+  const distributeFeeBtcSnacksTx = await btcSnacks.connect(authority).distributeFee();
+  if (expects !== undefined) {
+    await expects[1].after(distributeFeeBtcSnacksTx, metadataForDistributeFeeBtcSnacksExpect);
+  }
   // 3. EthSnacks - distributeFee
-  await ethSnacks.connect(authority).distributeFee();
+  const metadataForDistributeFeeEthSnacksExpect = expects !== undefined ? await expects[2].before() : {};
+  const distributeFeeEthSnacksTx = await ethSnacks.connect(authority).distributeFee();
+  if (expects !== undefined) {
+    await expects[2].after(distributeFeeEthSnacksTx, metadataForDistributeFeeEthSnacksExpect);
+  }
   // 4. Snacks - distributeFee
-  await snacks.connect(authority).distributeFee();
+  const metadataForDistributeFeeSnacksExpect = expects !== undefined ? await expects[3].before() : {};
+  const distributeFeeSnacksTx = await snacks.connect(authority).distributeFee();
+  if (expects !== undefined) {
+    await expects[3].after(distributeFeeSnacksTx, metadataForDistributeFeeSnacksExpect);
+  }
   // 5. Pulse - distributeBtcSnacksAndEthSnacks
-  await pulse.connect(authority).distributeBtcSnacksAndEthSnacks();
-  // 6. Seniorage - distributeNonBusdCurrencies
-  await seniorage.connect(authority).distributeNonBusdCurrencies(0, 0, 0);
-  // 7. Seniorage - distributeBusd
-  await seniorage.connect(authority).distributeBusd(0, 0, 0, 0, 0);
-  // 8. Pulse - harvest
-  await pulse.connect(authority).harvest();
-  // 9. Pulse - distributeSnacks
-  await pulse.connect(authority).distributeSnacks();
-  // 10. Pulse - distributeZoinks
-  await pulse.connect(authority).distributeZoinks();
-  // 11. PoolRewardDistributor - distributeRewards
-  await poolRewardDistributor.connect(authority).distributeRewards();
-  // 12. SnacksPool - deliverRewardsForAllLunchBoxParticipants
+  const metadataForDistributeBtcSnacksAndEthSnacksTx = expects !== undefined ? await expects[4].before() : {};
+  const distributeBtcSnacksAndEthSnacksTx = await pulse.connect(authority).distributeBtcSnacksAndEthSnacks();
+  if (expects !== undefined) {
+    await expects[4].after(distributeBtcSnacksAndEthSnacksTx, metadataForDistributeBtcSnacksAndEthSnacksTx);
+  }
+  // 6. Seniorage - provideLiquidity
+  const provideLiquidityTx = await seniorage.connect(authority).provideLiquidity(0, 0);
+  if (expects !== undefined) {
+    await expects[5](provideLiquidityTx);
+  }
+  // 7. Seniorage - distributeNonBusdCurrencies
+  const metadataForDistributeNonBusdCurrenciesTx = expects !== undefined ? await expects[6].before() : {};
+  const distributeNonBusdCurrenciesTx = await seniorage.connect(authority).distributeNonBusdCurrencies(0, 0, 0);
+  if (expects !== undefined) {
+    await expects[6].after(distributeNonBusdCurrenciesTx, metadataForDistributeNonBusdCurrenciesTx);
+  }
+  // 8. Seniorage - distributeBusd
+  const metadataForDistributeBusdTx = expects !== undefined ? await expects[7].before() : {};
+  const distributeBusdTx = await seniorage.connect(authority).distributeBusd(0, 0, 0);
+  if (expects !== undefined) {
+    await expects[7].after(distributeBusdTx, metadataForDistributeBusdTx);
+  }
+  // 9. Pulse - harvest
+  const harvestTx = await pulse.connect(authority).harvest();
+  if (expects !== undefined) {
+    await expects[8](harvestTx);
+  }
+  // 10. Pulse - distributeSnacks
+  const metadataForDistributeSnacksTx = expects !== undefined ? await expects[9].before() : {};
+  const distributeSnacksTx = await pulse.connect(authority).distributeSnacks();
+  if (expects !== undefined) {
+    await expects[9].after(distributeSnacksTx, metadataForDistributeSnacksTx);
+  }
+  // 11. Pulse - distributeZoinks
+  const metadataForDistributeZoinksTx = expects !== undefined ? await expects[10].before() : {};
+  const distributeZoinksTx = await pulse.connect(authority).distributeZoinks();
+  if (expects !== undefined) {
+    await expects[10].after(distributeZoinksTx, metadataForDistributeZoinksTx);
+  }
+  // 12. PoolRewardDistributor - distributeRewards
+  const metadataForDistributeRewardsTx = expects !== undefined ? await expects[11].before() : {};
+  const distributeRewardsTx = await poolRewardDistributor.connect(authority).distributeRewards(0);
+  if (expects !== undefined) {
+    await expects[11].after(distributeRewardsTx, metadataForDistributeRewardsTx);
+  }
+  // 13. SnacksPool - deliverRewardsForAllLunchBoxParticipants
   let user;
   let totalRewardAmountForParticipantsInSnacks = ZERO;
   let totalRewardAmountForParticipantsInBtcSnacks = ZERO;
@@ -503,7 +550,9 @@ const backendCall1224 = async (hre) => {
     totalRewardAmountForParticipantsInEthSnacks 
       = totalRewardAmountForParticipantsInEthSnacks.add(await snacksPool.earned(user, ethSnacks.address));
   }
-  await snacksPool.connect(authority).deliverRewardsForAllLunchBoxParticipants(
+
+  const metadataForDeliverRewardsForAllLunchBoxParticipantsTx = expects !== undefined ? await expects[12].before() : {};
+  const deliverRewardsForAllLunchBoxParticipantsTx = await snacksPool.connect(authority).deliverRewardsForAllLunchBoxParticipants(
     totalRewardAmountForParticipantsInSnacks,
     totalRewardAmountForParticipantsInBtcSnacks,
     totalRewardAmountForParticipantsInEthSnacks,
@@ -511,6 +560,15 @@ const backendCall1224 = async (hre) => {
     0,
     0
   );
+  if (expects !== undefined) {
+    await expects[12].after(
+      deliverRewardsForAllLunchBoxParticipantsTx,
+      totalRewardAmountForParticipantsInSnacks,
+      totalRewardAmountForParticipantsInBtcSnacks,
+      totalRewardAmountForParticipantsInEthSnacks,
+      metadataForDeliverRewardsForAllLunchBoxParticipantsTx
+    );
+  }
 }
 
 module.exports = {
@@ -527,7 +585,7 @@ module.exports = {
   mockedReserve0,
   mockedReserve1,
   mockSwaps,
-  mockPrice1Cumulative,
+  mockPrice0Cumulative,
   mockReserves,
   mockLiquidity,
   mockGetPair,

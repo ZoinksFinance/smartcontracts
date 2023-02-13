@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.15;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import "./base/RolesManager.sol";
 import "./interfaces/IMultipleRewardPool.sol";
 import "./interfaces/ISnacksBase.sol";
 import "./interfaces/IRouter.sol";
 
-contract Pulse is Ownable, Pausable {
+contract Pulse is RolesManager {
     using SafeERC20 for IERC20;
 
     uint256 private constant BASE_PERCENT = 10000;
@@ -28,15 +27,6 @@ contract Pulse is Ownable, Pausable {
     address public pancakeSwapPool;
     address public snacksPool;
     address public seniorage;
-    address public authority;
-
-    modifier onlyAuthority {
-        require(
-            msg.sender == authority,
-            "Pulse: caller is not authorised"
-        );
-        _;
-    }
     
     /**
     * @param busd_ Binance-Peg BUSD token address.
@@ -76,7 +66,7 @@ contract Pulse is Ownable, Pausable {
         address authority_
     )
         external
-        onlyOwner
+        onlyRole(DEFAULT_ADMIN_ROLE)
     {
         cakeLP = cakeLP_;
         zoinks = zoinks_;
@@ -86,7 +76,7 @@ contract Pulse is Ownable, Pausable {
         pancakeSwapPool = pancakeSwapPool_;
         snacksPool = snacksPool_;
         seniorage = seniorage_;
-        authority = authority_;
+        _grantRole(AUTHORITY_ROLE, authority_);
         if (IERC20(cakeLP_).allowance(address(this), pancakeSwapPool_) == 0) {
             IERC20(cakeLP_).approve(pancakeSwapPool_, type(uint256).max);
         }
@@ -102,26 +92,38 @@ contract Pulse is Ownable, Pausable {
     }
 
     /**
-    * @notice Triggers stopped state.
-    * @dev Could be called by the owner in case of resetting addresses.
+    * @notice Transfers all CAKE-LP tokens on the contract to the `receiver_` address.
+    * @dev Could be called only by the owner.
+    * @param receiver_ Receiver address.
     */
-    function pause() external onlyOwner {
-        _pause();
+    function withdrawCakeLP(address receiver_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 cakeLPBalance = IERC20(cakeLP).balanceOf(address(this));
+        if (cakeLPBalance != 0) {
+            IERC20(cakeLP).safeTransfer(receiver_, cakeLPBalance);
+        }
     }
 
     /**
-    * @notice Returns to normal state.
-    * @dev Could be called by the owner in case of resetting addresses.
+    * @notice Transfers deposited CAKE-LP tokens in the PancakeSwapPool contract to the `receiver_` address.
+    * @dev Could be called only by the owner. Fees goes to the Seniorage contract.
+    * @param receiver_ Receiver address.
     */
-    function unpause() external onlyOwner {
-        _unpause();
+    function withdrawCakeLPFromPool(address receiver_, uint256 amount_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(
+            amount_ <= IMultipleRewardPool(pancakeSwapPool).getBalance(address(this)) &&
+            amount_ != 0,
+            "Pulse: invalid amount to withdraw"
+        );
+        uint256 cakeLPBalanceBefore = IERC20(cakeLP).balanceOf(address(this));
+        IMultipleRewardPool(pancakeSwapPool).withdraw(amount_);
+        IERC20(cakeLP).safeTransfer(receiver_, IERC20(cakeLP).balanceOf(address(this)) - cakeLPBalanceBefore);
     }
 
     /**
     * @notice Distributes BtcSnacks and EthSnacks tokens.
     * @dev Called by the authorised address once every 12 hours.
     */
-    function distributeBtcSnacksAndEthSnacks() external whenNotPaused onlyAuthority {
+    function distributeBtcSnacksAndEthSnacks() external whenNotPaused onlyRole(AUTHORITY_ROLE) {
         uint256 btcSnacksBalance = IERC20(btcSnacks).balanceOf(address(this));
         uint256 ethSnacksBalance = IERC20(ethSnacks).balanceOf(address(this));
         if (btcSnacksBalance != 0) {
@@ -142,7 +144,7 @@ contract Pulse is Ownable, Pausable {
     * @notice Distributes Snacks tokens.
     * @dev Called by the authorised address once every 12 hours.
     */
-    function distributeSnacks() external whenNotPaused onlyAuthority {
+    function distributeSnacks() external whenNotPaused onlyRole(AUTHORITY_ROLE) {
         uint256 balance = IERC20(snacks).balanceOf(address(this));
         if (balance != 0) {
             uint256 amountToDistribute = balance * SNACKS_DISTRIBUTION_PERCENT / BASE_PERCENT;
@@ -158,7 +160,7 @@ contract Pulse is Ownable, Pausable {
     * @notice Distributes Zoinks and Pancake LPs tokens.
     * @dev Called by the authorised address once every 12 hours.
     */
-    function distributeZoinks() external whenNotPaused onlyAuthority {
+    function distributeZoinks() external whenNotPaused onlyRole(AUTHORITY_ROLE) {
         uint256 zoinksBalance = IERC20(zoinks).balanceOf(address(this));
         if (zoinksBalance != 0) {
             uint256 amountToDistribute = zoinksBalance * ZOINKS_DISTRIBUTION_PERCENT / BASE_PERCENT;
@@ -176,7 +178,7 @@ contract Pulse is Ownable, Pausable {
     * @notice Claims rewards from the PancakeSwapPool and SnacksPool.
     * @dev Called by the authorised address once every 12 hours.
     */
-    function harvest() external whenNotPaused onlyAuthority {
+    function harvest() external whenNotPaused onlyRole(AUTHORITY_ROLE) {
         IMultipleRewardPool(pancakeSwapPool).getReward();
         IMultipleRewardPool(snacksPool).getReward();
     }

@@ -187,6 +187,10 @@ module.exports = async ({
     hre.names.internal.lunchBox,
     (await deployments.get(hre.names.internal.lunchBox)).address
   );
+  await synchronizeWithEthernal(
+    hre.names.internal.holdingFeeDistributor,
+    (await deployments.get(hre.names.internal.holdingFeeDistributor)).address
+  );
 
   if (isRecompileNeeded) {
     console.log('Recompilation is needed due to new generated for the Ethernal artifacts...');

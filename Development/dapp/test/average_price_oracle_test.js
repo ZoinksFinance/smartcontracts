@@ -200,11 +200,29 @@ describe('AveragePriceOracle', () => {
       .div(TWAP_PERCENT)
       .div(RESOLUTION);
     expect(twapFromContract).to.be.equal(twap);
+    // Attempt to call once again on the first period
     await withImpersonatedSigner(zoinks.address, async (impersonatedZoinksSigner) => {
       await mintNativeTokens(impersonatedZoinksSigner, etherToMintForImpersonatedSigners);
-      await expect(
-        averagePriceOracle.connect(impersonatedZoinksSigner).update()
-      ).to.be.revertedWith("AveragePriceOracle: period not elapsed");
+      await expect(averagePriceOracle.connect(impersonatedZoinksSigner).update())
+        .to.be.reverted;
+    });
+    // Successful call on the second period
+    await time.increase(43200);
+    await withImpersonatedSigner(zoinks.address, async (impersonatedZoinksSigner) => {
+      await mintNativeTokens(impersonatedZoinksSigner, etherToMintForImpersonatedSigners);
+      await averagePriceOracle.connect(impersonatedZoinksSigner).update();
+    });
+    // Attempt to call again on the second period
+    await withImpersonatedSigner(zoinks.address, async (impersonatedZoinksSigner) => {
+      await mintNativeTokens(impersonatedZoinksSigner, etherToMintForImpersonatedSigners);
+      await expect(averagePriceOracle.connect(impersonatedZoinksSigner).update())
+        .to.be.reverted;
+    });
+    // Call has not been made on the first period
+    await time.increase(86400);
+    await withImpersonatedSigner(zoinks.address, async (impersonatedZoinksSigner) => {
+      await mintNativeTokens(impersonatedZoinksSigner, etherToMintForImpersonatedSigners);
+      await averagePriceOracle.connect(impersonatedZoinksSigner).update();
     });
   });
 });

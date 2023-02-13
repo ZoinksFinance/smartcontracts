@@ -30,4 +30,5 @@ interface ILunchBox {
     function updateRewardForUser(address user) external;
     function updateTotalSupplyFactor(uint256 totalSupplyBefore) external;
     function getReward(address user) external;
+    function earned(address user) external view returns (uint256);
 }

@@ -6,7 +6,7 @@ const {
   mockedReserve1,
   mockSwaps,
   mockReserves,
-  mockPrice1Cumulative
+  mockPrice0Cumulative
 } = require('../helpers');
 const { time } = require("@nomicfoundation/hardhat-network-helpers");
 
@@ -93,7 +93,7 @@ module.exports = async ({
   // Mocked price of zoinks in busd cumulative =
   //    busdReserve / zoinksReserve * 12hours
   //      * (2^112)
-  await mockPrice1Cumulative(
+  await mockPrice0Cumulative(
     mockedReserve1.div(mockedReserve0).mul(3600 * 12)
     .mul(
       ethers.BigNumber.from('2').pow(ethers.BigNumber.from('112'))
@@ -112,7 +112,7 @@ module.exports = async ({
   );
 
   // new mocked reserves are: 5 ZOINKS, 25 BUSD
-  await mockPrice1Cumulative(
+  await mockPrice0Cumulative(
     mockedReserve1.add(ethers.utils.parseEther('5'))
     .div(mockedReserve0.sub(ethers.utils.parseEther('5')))
     .mul(3600 * 12)

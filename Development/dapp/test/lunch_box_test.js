@@ -262,6 +262,7 @@ describe("LunchBox", () => {
         const totalRewardAmount = amountToStake.div(2); // 950 / 2 = 475
         const amountSnacksToStake = amountToStake.div(10); // 950 / 10 = 95
         await snacks.transfer(snacksPool.address, totalRewardAmount);
+        await snacks.transfer(lunchBox.address, totalRewardAmount);
         await btcSnacks.transfer(snacksPool.address, totalRewardAmount);
         await ethSnacks.transfer(snacksPool.address, totalRewardAmount);
         
@@ -406,99 +407,19 @@ describe("LunchBox", () => {
       });
       
       // Notify LunchBox about reward
-      await busd.transfer(lunchBox.address, amountToStake);
+      await snacks.transfer(lunchBox.address, amountToStake);
       
       await withImpersonatedSigner(poolRewardDistributor.address, async (poolRewardDistributorSigner) => {
         await lunchBox.connect(poolRewardDistributorSigner).notifyRewardAmount(amountToStake);
       });
-      
-      // Transfer ZOINKS to LunchBox (after swap balance)
-      await zoinks.transfer(lunchBox.address, ethers.utils.parseEther("2"));
-      await time.increase(84000);
       const balanceBefore = await snacks.balanceOf(owner.address);
       // Get reward
       await withImpersonatedSigner(snacksPool.address, async (snacksPoolSigner) => {
         await lunchBox.connect(snacksPoolSigner).getReward(owner.address);
       });
       // Check balance
-      const snacksReward = ethers.utils.parseEther("30.484140580694025");
+      const snacksReward = await lunchBox.rewardRate();
       expect(await snacks.balanceOf(owner.address)).to.equal(balanceBefore.add(snacksReward));
-    });
-
-    it("Successful getReward() execution (insufficient amount on redeem)", async() => {
-      const insufficientAmount = 100;
-
-      await withImpersonatedSigner(snacksPool.address, async (snacksPoolSigner) => {
-        await lunchBox.connect(snacksPoolSigner).getReward(owner.address);
-      });
-      
-      await snacks.approve(snacksPool.address, hre.ethers.utils.parseEther("1"));
-      await snacksPool.stake(hre.ethers.utils.parseEther("1"));
-      await snacksPool.activateLunchBox();
-      
-      // Stake from SnacksPool
-      await snacks.transfer(snacksPool.address, amountToStake);
-      await btcSnacks.transfer(snacksPool.address, amountToStake);
-      await ethSnacks.transfer(snacksPool.address, amountToStake);
-      await busd.mint(lunchBox.address, ethers.utils.parseEther("6"));
-      
-      await withImpersonatedSigner(snacksPool.address, async (snacksPoolSigner) => {
-        await lunchBox.connect(snacksPoolSigner)
-          .stakeForSnacksPool(amountToStake, amountToStake, amountToStake, 0, 0, 0);
-      });
-      
-      // Notify LunchBox about reward
-      await busd.transfer(lunchBox.address, amountToStake);
-
-      await withImpersonatedSigner(poolRewardDistributor.address, async (poolRewardDistributorSigner) => {
-        await lunchBox.connect(poolRewardDistributorSigner).notifyRewardAmount(amountToStake);
-      });
-      
-      // Transfer ZOINKS to LunchBox (after swap balance)
-      await zoinks.transfer(lunchBox.address, insufficientAmount);
-      await time.increase(84000);
-      // Get reward
-      await mockSwaps(
-          "PancakeSwapRouter",
-          deployments,
-          0,
-          owner.address,
-          insufficientAmount
-      );
-      const balanceBefore = await snacks.balanceOf(owner.address);
-      
-      await withImpersonatedSigner(snacksPool.address, async (snacksPoolSigner) => {
-        await lunchBox.connect(snacksPoolSigner).getReward(owner.address);
-      });
-      
-      // Check stored amount
-      expect(await snacks.balanceOf(owner.address)).to.equal(balanceBefore);
-      expect(await lunchBox.zoinksAmountStoredFor(owner.address)).to.equal(insufficientAmount);
-      // Notify LunchBox about reward
-      await busd.transfer(lunchBox.address, amountToStake);
-
-      await withImpersonatedSigner(poolRewardDistributor.address, async (poolRewardDistributorSigner) => {
-        await lunchBox.connect(poolRewardDistributorSigner).notifyRewardAmount(amountToStake);
-      });
-      
-      // Transfer more ZOINKS
-      await zoinks.transfer(lunchBox.address, mockedResultOfSwap);
-      // Get reward
-      await mockSwaps(
-          "PancakeSwapRouter",
-          deployments,
-          0,
-          owner.address,
-          mockedResultOfSwap
-      );
-      await time.increase(10000);
-      
-      await withImpersonatedSigner(snacksPool.address, async (snacksPoolSigner) => {
-        await lunchBox.connect(snacksPoolSigner).getReward(owner.address);
-      }); 
-      
-      // Check stored amount
-      expect(await lunchBox.zoinksAmountStoredFor(owner.address)).to.equal(0);
     });
 
     it("Successful notifyRewardAmount() execution", async() => {
@@ -506,9 +427,10 @@ describe("LunchBox", () => {
         // Reward rate expected
         let rewardRate = reward.div(43200);
         // Call from not the PRD contract
-        await expect(lunchBox.notifyRewardAmount(reward)).to.be.revertedWith("LunchBox: caller is not the PoolRewardDistributor contract");
+        await expect(lunchBox.notifyRewardAmount(reward))
+          .to.be.revertedWith("LunchBox: caller is not the PoolRewardDistributor contract");
         // Reward notification
-        await busd.transfer(lunchBox.address, reward);
+        await snacks.transfer(lunchBox.address, reward);
         
         await withImpersonatedSigner(poolRewardDistributor.address, async (poolRewardDistributorSigner) => {
           await lunchBox.connect(poolRewardDistributorSigner).notifyRewardAmount(reward);
@@ -517,7 +439,7 @@ describe("LunchBox", () => {
         // Reward rate check
         expect(await lunchBox.rewardRate()).to.equal(rewardRate);
         // Another reward notification
-        await busd.transfer(lunchBox.address, reward);
+        await snacks.transfer(lunchBox.address, reward);
         
         await withImpersonatedSigner(poolRewardDistributor.address, async (poolRewardDistributorSigner) => {
           await lunchBox.connect(poolRewardDistributorSigner).notifyRewardAmount(reward);
@@ -528,7 +450,7 @@ describe("LunchBox", () => {
         expect(await lunchBox.rewardRate()).to.equal(rewardRate);
         await time.increase(43200);
         // Reward notification after period finished
-        await busd.transfer(lunchBox.address, reward);
+        await snacks.transfer(lunchBox.address, reward);
         
         await withImpersonatedSigner(poolRewardDistributor.address, async (poolRewardDistributorSigner) => {
           await lunchBox.connect(poolRewardDistributorSigner).notifyRewardAmount(reward);
@@ -540,7 +462,7 @@ describe("LunchBox", () => {
 
         // Staking token clearing
         await withImpersonatedSigner(lunchBox.address, async (lunchBoxSigner) => {
-          await busd.connect(lunchBoxSigner).transfer(owner.address, await busd.balanceOf(lunchBox.address));
+          await snacks.connect(lunchBoxSigner).transfer(owner.address, await snacks.balanceOf(lunchBox.address));
         });
 
         await withImpersonatedSigner(poolRewardDistributor.address, async (poolRewardDistributorSigner) => {
@@ -552,7 +474,7 @@ describe("LunchBox", () => {
     it("Successful setRewardsDuration() execution", async() => {
         const reward = ethers.utils.parseEther("100");
         // Reward notification
-        await busd.transfer(lunchBox.address, reward);
+        await snacks.transfer(lunchBox.address, reward);
 
         await withImpersonatedSigner(poolRewardDistributor.address, async (poolRewardDistributorSigner) => {
           await lunchBox.connect(poolRewardDistributorSigner).notifyRewardAmount(reward);
