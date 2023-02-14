@@ -97,7 +97,7 @@ describe("Zoinks", () => {
     const MAX_SUPPLY = await zoinks.MAX_SUPPLY();
     await busd.mint(owner.address, MAX_SUPPLY);
     await busd.approve(zoinks.address, MAX_SUPPLY);
-    await zoinks.mint(MAX_SUPPLY.sub(ethers.utils.parseEther('500001')));
+    await zoinks.mint(MAX_SUPPLY.sub(ethers.utils.parseEther('760001')));
     await time.increase(3600 * 12);
     await expect(zoinks.applyTWAP()).to.be.reverted;
     await expect(zoinks.connect(authority).applyTWAP()).to.be.revertedWith('Zoinks: max supply exceeded');
@@ -231,7 +231,7 @@ describe("Zoinks", () => {
     await zoinks.setBuffer(buffer);
     await time.increase(timeElapsed);
     await zoinks.connect(authority).applyTWAP();
-    expect(await zoinks.zoinksAmountStored()).to.equal(3750007);
+    expect(await zoinks.zoinksAmountStored()).to.equal(5700007);
     await mockPrice0Cumulative(cumulativePrice, deployments);
     await zoinks.setBuffer(5);
     await time.increase(timeElapsed);

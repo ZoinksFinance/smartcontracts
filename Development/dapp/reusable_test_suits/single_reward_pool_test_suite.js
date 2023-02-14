@@ -110,6 +110,7 @@ module.exports = (
       // Rewards transfer and notifications`
       await zoinks.transfer(pool.address, amountToTransfer);
       await pool.notifyRewardAmount(amountToTransfer);
+      await pool.grantRole(ethers.utils.hexZeroPad(0, 32), alice.address);
       // Attempting to get reward without stake
       await pool.connect(alice).getReward();
       // Stake
@@ -141,6 +142,7 @@ module.exports = (
       // Rewards transfer and notifications
       await zoinks.transfer(pool.address, amountToTransfer);
       await pool.notifyRewardAmount(amountToTransfer);
+      await pool.grantRole(ethers.utils.hexZeroPad(0, 32), alice.address);
       await expect(pool.exit()).to.be.revertedWith("SingleRewardPool: can not withdraw 0");
       // Stake
       const amountToStake = ethers.utils.parseEther("100");
