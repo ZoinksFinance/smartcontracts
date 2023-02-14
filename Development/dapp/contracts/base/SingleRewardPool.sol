@@ -115,6 +115,7 @@ abstract contract SingleRewardPool is ISingleRewardPool, RolesManager, Reentranc
         external 
         whenNotPaused
         nonReentrant 
+        onlyRole(DEFAULT_ADMIN_ROLE)
         updateReward(msg.sender) 
     {
         require(
